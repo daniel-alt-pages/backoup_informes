@@ -12,28 +12,28 @@ const URLS = {
 };
 
 // --- (Placeholder) Videos de Retroalimentación ---
-// Este objeto será reemplazado o llenado desde un JSON/CSV en el futuro
+// *** MEJORADO: Añadido 'thumbnail_url' para las vistas previas ***
 const FEEDBACK_VIDEOS = {
     matematicas: [
-        { title: "Repaso Ecuaciones Lineales", video_link: "#", description: "Álgebra (Competencia 2)", question_range: "1-5" },
-        { title: "Conceptos de Geometría Básica", video_link: "#", description: "Geometría (Competencia 1)", question_range: "6-10" },
-        { title: "Introducción a Estadística", video_link: "#", description: "Estadística (Competencia 3)", question_range: "11-15" },
-        { title: "Repaso General Matemáticas", video_link: "#", description: "General", question_range: "Todos" }
+        { title: "Repaso Ecuaciones Lineales", video_link: "#", description: "Álgebra (Competencia 2)", question_range: "1-5", thumbnail_url: "https://placehold.co/320x180/dc2626/ffffff?text=Video+1" },
+        { title: "Conceptos de Geometría Básica", video_link: "#", description: "Geometría (Competencia 1)", question_range: "6-10", thumbnail_url: "https://placehold.co/320x180/dc2626/ffffff?text=Video+2" },
+        { title: "Introducción a Estadística", video_link: "#", description: "Estadística (Competencia 3)", question_range: "11-15", thumbnail_url: "https://placehold.co/320x180/dc2626/ffffff?text=Video+3" },
+        { title: "Repaso General Matemáticas", video_link: "#", description: "General", question_range: "Todos", thumbnail_url: "https://placehold.co/320x180/dc2626/ffffff?text=Video+4" }
     ],
     lectura: [
-        { title: "Identificando Ideas Principales", video_link: "#", description: "Competencia 1", question_range: "1-8" },
-        { title: "Análisis de Textos Argumentativos", video_link: "#", description: "Competencia 3", question_range: "9-15" }
+        { title: "Identificando Ideas Principales", video_link: "#", description: "Competencia 1", question_range: "1-8", thumbnail_url: "https://placehold.co/320x180/0284c7/ffffff?text=Video+1" },
+        { title: "Análisis de Textos Argumentativos", video_link: "#", description: "Competencia 3", question_range: "9-15", thumbnail_url: "https://placehold.co/320x180/0284c7/ffffff?text=Video+2" }
     ],
     sociales: [
-        { title: "Derechos Fundamentales", video_link: "#", description: "Competencia 3", question_range: "N/A" }
+        { title: "Derechos Fundamentales", video_link: "#", description: "Competencia 3", question_range: "N/A", thumbnail_url: "https://placehold.co/320x180/ca8a04/ffffff?text=Video+1" }
     ],
     ciencias: [], // Sin videos para este ejemplo
     ingles: [
-        { title: "Uso del Presente Simple", video_link: "#", description: "Nivel A1", question_range: "1-10" }
+        { title: "Uso del Presente Simple", video_link: "#", description: "Nivel A1", question_range: "1-10", thumbnail_url: "https://placehold.co/320x180/9333ea/ffffff?text=Video+1" }
     ]
 };
 
-// --- Definiciones de Skills (MODIFICADAS POR JSON) ---
+// --- Definiciones de Skills ---
 const skillsData = {
     lectura: {
         color: 'var(--color-lectura)',
@@ -194,14 +194,13 @@ let ANSWER_KEYS_S1 = {};
 let ANSWER_KEYS_S2 = {};
 let QUESTION_HEADERS_S1 = [];
 let QUESTION_HEADERS_S2 = [];
-let QUESTION_STATS = { s1: {}, s2: {} }; // NUEVO: Para estadísticas de preguntas
+let QUESTION_STATS = { s1: {}, s2: {} };
 
 let ALL_STUDENTS_ARRAY = [];
 let groupAverages = { lectura: 0, matematicas: 0, sociales: 0, ciencias: 0, ingles: 0 };
 
-// NUEVO: Variables de Paginación
 let currentAdminPage = 1;
-const ADMIN_ROWS_PER_PAGE = 25; // Puedes ajustar este número
+const ADMIN_ROWS_PER_PAGE = 25;
 let lastCalculatedTotalPages = 1;
 
 let currentAdminSort = { key: 'rank', direction: 'asc' };
@@ -278,9 +277,8 @@ async function loadAllData() {
 
         console.log("Datos parseados correctamente.");
         
-        // Calcular promedios y estadísticas después de tener TODOS los datos
         calculateGroupAverages();
-        calculateQuestionStatistics(); // NUEVA FUNCIÓN
+        calculateQuestionStatistics();
 
     } catch (error) {
         console.error("Error crítico durante la carga o parseo de datos:", error);
@@ -334,7 +332,7 @@ function parseMainData(csvText) {
              email: values[emailIndex] || '-',
              docType: values[docTypeIndex] || '-',
              docNumber: docNumber,
-             birthDate: parseBirthDate(values[birthDateIndex]), // Guardamos la fecha de nacimiento
+             birthDate: parseBirthDate(values[birthDateIndex]),
              departamento: "",
              colegio: values[colegioIndex] || 'seamosgenios',
              puntajes: {
@@ -398,7 +396,7 @@ function parseStudentAnswers(csvText, targetObject) {
 
        const answers = {};
        headers.forEach((header, index) => {
-           if (index > 2 && header) { // Asumiendo que las primeras 3 son ID, Email, Nombre
+           if (index > 2 && header) {
             answers[header] = values[index] || '';
            }
        });
@@ -417,7 +415,6 @@ function calculateGroupAverages() {
      }
 }
 
-// NUEVA FUNCIÓN: Calcular estadísticas por pregunta
 function calculateQuestionStatistics() {
     console.log("Calculando estadísticas de preguntas...");
     QUESTION_STATS = { s1: {}, s2: {} };
@@ -427,7 +424,7 @@ function calculateQuestionStatistics() {
     // Procesar Sesión 1
     QUESTION_HEADERS_S1.forEach(header => {
         const correctAnswer = ANSWER_KEYS_S1[header];
-        if (!correctAnswer) return; // No es una pregunta calificable
+        if (!correctAnswer) return;
 
         let correctCount = 0;
         ALL_STUDENTS_ARRAY.forEach(student => {
@@ -492,14 +489,15 @@ function generateReportHtml(studentData) {
              `;
          }).join('');
      };
+    
+    // *** FUNCIÓN MODIFICADA: Ahora usa <details> y <summary> ***
+    // Esto corrige el bug en móviles y tabletas.
      const renderCompetencies = (subjectKey, score, competencies, uniqueId) => {
          const currentLevel = getLevel(score, skillsData[subjectKey].levels);
          let levelOffset = (subjectKey === 'ingles') ? 1 : 2;
 
          return competencies.map((comp, compIndex) => {
-             const compId = `comp-${subjectKey}-${compIndex}-${uniqueId}`;
              const skillsHtml = (comp.skills || []).map((skill, skillIndex) => {
-                 const skillId = `skill-${subjectKey}-${compIndex}-${skillIndex}-${uniqueId}`;
                  let isAchieved;
                  if (subjectKey === 'ingles') { isAchieved = currentLevel.index >= skill.level; }
                  else { isAchieved = currentLevel.index >= (skill.level - 1); }
@@ -519,16 +517,17 @@ function generateReportHtml(studentData) {
                  `;
              }).join('');
 
+             // Se reemplaza el <div> y <button> por <details> y <summary>
              return `
-                 <div class="competency-card">
-                     <div class="flex justify-between items-center cursor-pointer toggle-skills-btn" data-target="${compId}">
+                 <details class="competency-card">
+                     <summary>
                          <h4 class="text-base font-semibold text-brand-header pr-2">${comp.name || 'Competencia sin nombre'}</h4>
-                         <svg class="h-5 w-5 text-gray-500 transition-transform duration-300" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
-                     </div>
-                     <div id="${compId}" class="skills-container space-y-2">
+                         <svg class="summary-chevron h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                     </summary>
+                     <div class="competency-content space-y-3">
                          ${skillsHtml || '<p class="text-xs text-gray-500 italic">No hay habilidades detalladas para esta competencia.</p>'}
                      </div>
-                 </div>
+                 </details>
              `;
          }).join('');
      };
@@ -560,9 +559,8 @@ function generateReportHtml(studentData) {
                      </div>
                  </div>
                  
-                 <!-- INICIO: Modificación Paso 1 y 2 -->
+                 <!-- *** SECCIÓN DE VIDEO MEJORADA *** -->
                  ${renderFeedbackVideos(subjectKey)}
-                 <!-- FIN: Modificación Paso 1 y 2 -->
                  
                  <div class="mb-5 sm:mb-6">
                      <h3 class="text-base sm:text-lg font-semibold text-brand-header mb-1 sm:mb-2 flex items-center gap-2">
@@ -589,74 +587,40 @@ function generateReportHtml(studentData) {
      return subjectCardsHtml;
 }
 
-<!-- INICIO: Modificación Paso 2 -->
-// NUEVA FUNCIÓN: Renderizar videos de retroalimentación (colapsable e interactivo)
+// *** FUNCIÓN MODIFICADA: Renderiza vistas previas de video (miniaturas) ***
 function renderFeedbackVideos(subjectKey) {
     const videos = FEEDBACK_VIDEOS[subjectKey];
-    // Si no hay videos, no renderiza nada (ni el contenedor)
     if (!videos || videos.length === 0) {
         return '';
     }
 
-    // 1. Agrupar videos por 'description' (¡Esto crea las "carpetas"!)
-    const videosAgrupados = {};
-    videos.forEach(video => {
-        // Usar 'General' si la descripción está vacía
-        const groupName = video.description || 'General';
-        if (!videosAgrupados[groupName]) {
-            videosAgrupados[groupName] = [];
-        }
-        videosAgrupados[groupName].push(video);
-    });
-
-    // 2. Generar el HTML para cada grupo (cada "carpeta")
-    const gruposHtml = Object.keys(videosAgrupados).map(groupName => {
-        
-        // Generar el HTML para cada video dentro de este grupo
-        const videoLinksHtml = videosAgrupados[groupName].map(video => `
-            <div class="feedback-video-item flex items-start gap-3">
-                <div class="video-icon text-brand-primary mt-0.5">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                </div>
-                <div>
-                    <a href="${video.video_link || '#'}" target="_blank" rel="noopener noreferrer" class="video-link text-sm font-semibold block text-brand-secondary hover:text-brand-blue-dark hover:underline">
-                        ${video.title || 'Video de Repaso'}
-                    </a>
-                    <p class="text-xs text-gray-600 mt-0.5">
-                        Preguntas: ${video.question_range || 'N/A'}
-                    </p>
-                </div>
+    // Generar el HTML para cada tarjeta de video
+    const videoCardsHtml = videos.map(video => `
+        <a href="${video.video_link || '#'}" target="_blank" rel="noopener noreferrer" class="video-card group">
+            <img src="${video.thumbnail_url || 'https://placehold.co/320x180/e5e7eb/9ca3af?text=Video'}"
+                 alt="Miniatura de ${video.title}"
+                 class="video-thumbnail"
+                 onerror="this.src='https://placehold.co/320x180/e5e7eb/9ca3af?text=Error'"
+            />
+            <div class="video-info">
+                <span class="video-link group-hover:text-brand-blue-dark group-hover:underline">
+                    ${video.title || 'Video de Repaso'}
+                </span>
+                <span class="video-details">
+                    ${video.description || 'General'}
+                </span>
             </div>
-        `).join('');
-
-        // Devolver la "carpeta" (otro <details> anidado) para este grupo
-        return `
-            <details class="video-group-container" open> <summary class="video-group-summary">
-                    <span class="font-semibold text-sm text-gray-700">${groupName}</span>
-                    <svg class="summary-chevron h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-                    </svg>
-                </summary>
-                <div class="video-group-content">
-                    ${videoLinksHtml}
-                </div>
-            </details>
-        `;
-
-    }).join('');
+        </a>
+    `).join('');
 
 
-    // 3. Devolver el contenedor principal colapsable
-    // El 'mb-4' lo separa del bloque "Nivel" que viene después
+    // Devolver el contenedor principal colapsable
     return `
-        <details class="feedback-videos-container mb-4">
+        <details class="feedback-videos-container" open>
             <summary class="feedback-videos-summary group">
                 <div class="flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-brand-primary" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8.067v3.866a1 1 0 001.555.832l3.197-1.933a1 1 0 000-1.664l-3.197-1.933z" clip-rule="evenodd" />
                     </svg>
                     <h4 class="text-base font-semibold text-brand-header">Clases de Retroalimentación (${videos.length})</h4>
                 </div>
@@ -665,12 +629,13 @@ function renderFeedbackVideos(subjectKey) {
                 </svg>
             </summary>
             <div class="feedback-videos-content">
-                ${gruposHtml}
+                <div class="video-grid">
+                    ${videoCardsHtml}
+                </div>
             </div>
         </details>
     `;
 }
-<!-- FIN: Modificación Paso 2 -->
 
 
 // --- Generar HTML para Feedback Detallado (CON DATOS) ---
@@ -710,7 +675,6 @@ function generateDetailedFeedbackHtml(studentDocNumber) {
                 const questionNumberMatch = header.match(/\[(\d+)\.*\]/);
                 const questionLabel = questionNumberMatch ? `Pregunta ${questionNumberMatch[1]}` : header;
 
-                // NUEVO: Obtener estadísticas
                 const stats = QUESTION_STATS[session === 1 ? 's1' : 's2'][header];
                 let statsHtml = '<p class="text-xs text-gray-600">Estadísticas no disponibles.</p>';
                 if (stats && stats.total > 0) {
@@ -742,24 +706,23 @@ function generateDetailedFeedbackHtml(studentDocNumber) {
                             ${!correctAnswer ? `<span class="text-xs text-gray-400">(Sin clave)</span>` : ''}
                         </div>
                         
-                        <!-- Sección de Estadísticas (AHORA DINÁMICA) -->
+                        <!-- Sección de Estadísticas -->
                         <div class="pt-3 border-t border-gray-200">
                             <h5 class="text-sm font-semibold text-gray-700 mb-1">Estadísticas Globales</h5>
                             ${statsHtml}
                         </div>
 
-                        <!-- Sección de Explicación (Placeholder del JSON) -->
+                        <!-- Sección de Explicación (Placeholder) -->
                         <div class="pt-3 border-t border-gray-200">
                             <h5 class="text-sm font-semibold text-gray-700 mb-1">Explicación (Ejemplo)</h5>
                             <p class="text-xs text-gray-600">La capital de Francia es París, reconocida como centro político y cultural.</p>
                         </div>
 
-                        <!-- NUEVO: Sección de Análisis (Complemento) -->
+                        <!-- Sección de Análisis (Placeholder) -->
                         <div class="pt-3 border-t border-gray-200">
                             <h5 class="text-sm font-semibold text-gray-700 mb-1">Análisis de Competencia</h5>
                             <p class="text-xs text-gray-600 italic">
                                 <strong>Próximamente:</strong> Aquí verás la habilidad específica evaluada (ej. "Habilidad 2.1").
-                                <br>(Se requiere un archivo que mapee cada pregunta a una habilidad).
                             </p>
                         </div>
                     </div>
@@ -798,25 +761,13 @@ function generateDetailedFeedbackHtml(studentDocNumber) {
 }
 
 // --- Función addToggleListeners ---
+// *** MODIFICADA: Se eliminó el listener para '.toggle-skills-btn' ***
+// Ya no es necesario porque usamos <details> nativo.
 function addToggleListeners(containerSelector) {
      const container = document.querySelector(containerSelector);
      if (!container) return;
 
      container.addEventListener('click', (e) => {
-         // Toggle para Competencias/Habilidades
-         const skillsButton = e.target.closest('.toggle-skills-btn');
-         if (skillsButton) {
-             const targetId = skillsButton.dataset.target;
-             const targetElement = document.getElementById(targetId);
-             const icon = skillsButton.querySelector('svg');
-             if (targetElement) {
-                 const isExpanded = targetElement.classList.toggle('expanded');
-                 skillsButton.classList.toggle('expanded', isExpanded);
-                 if(icon) icon.style.transform = isExpanded ? 'rotate(180deg)' : 'rotate(0deg)';
-             }
-             return;
-         }
-
          // Toggle para Tabs de Feedback
          const tabButton = e.target.closest('.feedback-tab');
          if (tabButton) {
@@ -833,16 +784,7 @@ function addToggleListeners(containerSelector) {
          }
      });
 
-     if (containerSelector === '#individual-report-content' || containerSelector === '#admin-modal-body') {
-         setTimeout(() => {
-             container.querySelectorAll('.toggle-skills-btn').forEach(button => {
-                 if (!button.classList.contains('expanded')) {
-                     // No expandir por defecto
-                     // button.click();
-                 }
-             });
-         }, 150);
-     }
+     // (El resto de la lógica de toggle para .toggle-skills-btn se ha eliminado)
  }
 
 // --- Función showIndividualReport ---
@@ -858,14 +800,14 @@ function showIndividualReport(studentData, fromSession = false) {
      elements.individualReportContent.innerHTML = '';
      const reportHtml = generateReportHtml(studentData);
      elements.individualReportContent.innerHTML = reportHtml;
-     addToggleListeners('#individual-report-content');
+     addToggleListeners('#individual-report-content'); // Sigue siendo necesario para las pestañas de feedback
 
      const feedbackContainer = document.getElementById('detailed-feedback-section');
      if (feedbackContainer) {
          feedbackContainer.innerHTML = '';
          const feedbackHtml = generateDetailedFeedbackHtml(studentData.docNumber);
          feedbackContainer.innerHTML = feedbackHtml;
-         addToggleListeners('#detailed-feedback-section');
+         addToggleListeners('#detailed-feedback-section'); // Añadido para las pestañas
      } else {
          console.error("No se encontró el contenedor #detailed-feedback-section");
      }
@@ -978,7 +920,7 @@ function renderAdminDashboard() {
     const { scoreDistribution } = calculateAdminStats();
     renderSubjectAvgChart();
     renderScoreDistChart(scoreDistribution);
-    currentAdminPage = 1; // Resetear a página 1 al mostrar dashboard
+    currentAdminPage = 1;
     renderAdminTable();
    }
 function showAdminView(fromSession = false) {
@@ -990,11 +932,9 @@ function showAdminView(fromSession = false) {
      if (!fromSession) window.scrollTo(0, 0);
    }
    
-// --- FUNCIÓN RENDER ADMIN TABLE (MODIFICADA PARA PAGINACIÓN) ---
 function renderAdminTable() {
      if (!elements.adminTableBody) return;
 
-     // 1. Filtrar
      const filterText = currentAdminFilter.toLowerCase().trim();
      const filteredStudents = ALL_STUDENTS_ARRAY.filter(student => {
          if (!filterText) return true;
@@ -1004,16 +944,14 @@ function renderAdminTable() {
                 (student.municipio || '').toLowerCase().includes(filterText) );
      });
 
-     // 2. Ordenar
      const key = currentAdminSort.key;
      const direction = currentAdminSort.direction === 'asc' ? 1 : -1;
      const getNestedProperty = (obj, path) => path.split('.').reduce((acc, part) => acc && acc[part], obj);
      
-     const sortedStudents = [...filteredStudents].sort((a, b) => { // Usar copia para ordenar
+     const sortedStudents = [...filteredStudents].sort((a, b) => {
          let valA = getNestedProperty(a, key);
          let valB = getNestedProperty(b, key);
          
-         // Manejo especial para fecha de nacimiento (dd/mm/yyyy)
          if (key === 'birthDate') {
              const parseDate = (dateStr) => {
                  if (!dateStr) return 0;
@@ -1033,40 +971,36 @@ function renderAdminTable() {
          return 0;
      });
 
-     // 3. Paginar
      const totalStudents = sortedStudents.length;
      const totalPages = Math.ceil(totalStudents / ADMIN_ROWS_PER_PAGE);
-     lastCalculatedTotalPages = totalPages; // Guardar total de páginas
+     lastCalculatedTotalPages = totalPages;
      currentAdminPage = Math.min(Math.max(1, currentAdminPage), totalPages || 1);
 
      const startIndex = (currentAdminPage - 1) * ADMIN_ROWS_PER_PAGE;
      const endIndex = startIndex + ADMIN_ROWS_PER_PAGE;
      const paginatedStudents = sortedStudents.slice(startIndex, endIndex);
 
-     // 4. Renderizar
      elements.adminTableBody.innerHTML = '';
      if (paginatedStudents.length === 0) {
          elements.adminNoResults.classList.remove('hidden');
      } else {
          elements.adminNoResults.classList.add('hidden');
          const rowsHtml = paginatedStudents.map((student) => `
-             <tr class="hover:bg-gray-50 text-xs">
-                 <td class="px-2 py-2 text-center font-medium text-gray-500">${student.rank}</td>
-                 <td class="px-2 py-2 font-medium text-gray-900">${student.nombre || 'N/A'}</td>
-                 <td class="px-2 py-2 text-gray-600 truncate max-w-[150px]">${student.email || '-'}</td>
-                 <td class="px-2 py-2 text-center text-gray-500">${student.docType || '-'}</td>
-                 <td class="px-2 py-2 text-gray-600">${student.docNumber || '-'}</td>
-                 <!-- NUEVA CELDA -->
-                 <td class="px-2 py-2 text-gray-600">${student.birthDate || '-'}</td>
-                 <!-- CELDAS RE-INDEXADAS -->
-                 <td class="px-2 py-2 text-center font-bold text-base" style="color: var(--brand-primary);">${student.puntajeGlobal || 0}</td>
-                 <td class="px-2 py-2 text-center font-semibold" style="color: var(--color-lectura);">${student.puntajes.lectura || 0}</td>
-                 <td class="px-2 py-2 text-center font-semibold" style="color: var(--color-matematicas);">${student.puntajes.matematicas || 0}</td>
-                 <td class="px-2 py-2 text-center font-semibold" style="color: var(--color-sociales);">${student.puntajes.sociales || 0}</td>
-                 <td class="px-2 py-2 text-center font-semibold" style="color: var(--color-ciencias);">${student.puntajes.ciencias || 0}</td>
-                 <td class="px-2 py-2 text-center font-semibold" style="color: var(--color-ingles);">${student.puntajes.ingles || 0}</td>
-                 <td class="px-2 py-2 text-gray-600 truncate max-w-[120px]">${student.municipio || 'Desconocido'}</td>
-                 <td class="px-2 py-2 text-center">
+             <tr class="hover:bg-gray-50">
+                 <td class="px-4 py-3 text-center font-medium text-gray-500">${student.rank}</td>
+                 <td class="px-4 py-3 font-medium text-gray-900">${student.nombre || 'N/A'}</td>
+                 <td class="px-4 py-3 text-gray-600 truncate max-w-[150px]">${student.email || '-'}</td>
+                 <td class="px-4 py-3 text-center text-gray-500">${student.docType || '-'}</td>
+                 <td class="px-4 py-3 text-gray-600">${student.docNumber || '-'}</td>
+                 <td class="px-4 py-3 text-gray-600">${student.birthDate || '-'}</td>
+                 <td class="px-4 py-3 text-center font-bold text-base" style="color: var(--brand-primary);">${student.puntajeGlobal || 0}</td>
+                 <td class="px-4 py-3 text-center font-semibold" style="color: var(--color-lectura);">${student.puntajes.lectura || 0}</td>
+                 <td class="px-4 py-3 text-center font-semibold" style="color: var(--color-matematicas);">${student.puntajes.matematicas || 0}</td>
+                 <td class="px-4 py-3 text-center font-semibold" style="color: var(--color-sociales);">${student.puntajes.sociales || 0}</td>
+                 <td class="px-4 py-3 text-center font-semibold" style="color: var(--color-ciencias);">${student.puntajes.ciencias || 0}</td>
+                 <td class="px-4 py-3 text-center font-semibold" style="color: var(--color-ingles);">${student.puntajes.ingles || 0}</td>
+                 <td class="px-4 py-3 text-gray-600 truncate max-w-[120px]">${student.municipio || 'Desconocido'}</td>
+                 <td class="px-4 py-3 text-center">
                       <button class="view-report-btn" data-student-id="${student.docNumber}">Ver</button>
                  </td>
              </tr>
@@ -1074,7 +1008,6 @@ function renderAdminTable() {
          elements.adminTableBody.innerHTML = rowsHtml;
      }
      
-     // 5. Actualizar Controles de Paginación
      const paginationInfo = document.getElementById('admin-pagination-info');
      const prevPageBtn = document.getElementById('admin-prev-page');
      const nextPageBtn = document.getElementById('admin-next-page');
@@ -1236,7 +1169,7 @@ document.addEventListener('DOMContentLoaded', async () => {
      // Listeners Paginación y Filtro
      elements.adminSearchInput?.addEventListener('input', (e) => {
          currentAdminFilter = e.target.value;
-         currentAdminPage = 1; // Resetear a página 1 al filtrar
+         currentAdminPage = 1;
          renderAdminTable();
      });
 
@@ -1248,7 +1181,7 @@ document.addEventListener('DOMContentLoaded', async () => {
      });
 
      document.getElementById('admin-next-page')?.addEventListener('click', () => {
-         if (currentAdminPage < lastCalculatedTotalPages) { // Usar variable guardada
+         if (currentAdminPage < lastCalculatedTotalPages) {
              currentAdminPage++;
              renderAdminTable();
          }
@@ -1264,7 +1197,7 @@ document.addEventListener('DOMContentLoaded', async () => {
              currentAdminSort.key = key;
              currentAdminSort.direction = ['nombre', 'email', 'docType', 'docNumber', 'municipio', 'birthDate'].includes(key) ? 'asc' : 'desc';
          }
-         currentAdminPage = 1; // Resetear a página 1 al ordenar
+         currentAdminPage = 1;
          renderAdminTable();
      }); }
      
@@ -1301,3 +1234,4 @@ document.addEventListener('DOMContentLoaded', async () => {
      }
 
 });
+
