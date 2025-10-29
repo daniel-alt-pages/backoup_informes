@@ -1,0 +1,86 @@
+{
+
+    "matematicas": [
+
+        {
+
+            "title": "Clase 1: Geometría y Estadística",
+            "question_range": "Preguntas 1-10",
+            "video_link": "https://drive.google.com/file/d/1RcmZqjqQaxPtW2_Xk-qhYn8tIgcYjprY/view?usp=sharing",
+            "description": "Repaso de conceptos de geometría y análisis de datos."
+
+        },
+
+        {
+
+            "title": "Clase 2: Álgebra y Funciones",
+            "question_range": "Preguntas 11-20",
+            "video_link": "https://drive.google.com/file/d/1RcmZqjqQaxPtW2_Xk-qhYn8tIgcYjprY/view?usp=sharing",
+            "description": "Fundamentos de álgebra y tipos de funciones."
+
+        }
+
+    ],
+
+    "lectura": [
+
+        {
+
+            "title": "Clase 1: Análisis de Textos Argumentativos",
+            "question_range": "Preguntas 1-12",
+            "video_link": "https://drive.google.com/file/d/1RcmZqjqQaxPtW2_Xk-qhYn8tIgcYjprY/view?usp=sharing",
+            "description": "Cómo identificar la idea principal y la postura del autor."
+
+        }
+
+    ],
+
+    "sociales": [
+
+        {
+
+            "title": "Clase 1: Constitución y Derechos",
+
+            "question_range": "Preguntas 1-15",
+
+            "video_link": "https://drive.google.com/file/d/1RcmZqjqQaxPtW2_Xk-qhYn8tIgcYjprY/view?usp=sharing",
+
+            "description": "Análisis de los derechos fundamentales y la estructura del Estado."
+
+        }
+
+    ],
+
+    "ciencias": [
+
+        {
+
+            "title": "Clase 1: Biología y Química",
+
+            "question_range": "Preguntas 1-15",
+
+            "video_link": "https://drive.google.com/file/d/1RcmZqjqQaxPtW2_Xk-qhYn8tIgcYjprY/view?usp=sharing",
+
+            "description": "Repaso de conceptos de célula, ecosistemas y reacciones."
+
+        }
+
+    ],
+
+    "ingles": [
+
+        {
+
+            "title": "Clase 1: Reading Comprehension Tips",
+
+            "question_range": "Preguntas 1-10",
+
+            "video_link": "https://drive.google.com/file/d/1RcmZqjqQaxPtW2_Xk-qhYn8tIgcYjprY/view?usp=sharing",
+
+            "description": "Strategies for understanding texts (Parts 1-4)."
+
+        }
+
+    ]
+
+}
