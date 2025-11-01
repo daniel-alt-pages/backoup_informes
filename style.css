@@ -56,6 +56,58 @@ body {
     transform: translateY(-2px);
 }
 
+/* (NUEVO) Tarjeta de selección de informe */
+.report-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 1.5rem;
+    background-color: var(--brand-surface);
+    border: 1px solid var(--brand-border);
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+.report-card:hover {
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+    border-color: var(--brand-secondary);
+}
+.report-card-info {
+    flex-grow: 1;
+}
+.report-card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--brand-header);
+    line-height: 1.4;
+}
+.report-card-date {
+    font-size: 0.85rem;
+    color: #6b7280;
+    margin-top: 0.1rem;
+}
+.report-card-score {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    margin-left: 1rem;
+    flex-shrink: 0;
+}
+.report-card-global {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--brand-primary);
+    line-height: 1;
+}
+.report-card-label {
+    font-size: 0.75rem;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+
 /* Niveles de desempeño */
 .level-steps-container {
     display: grid;
@@ -87,14 +139,7 @@ body {
 .level-step-item .level-range { display: block; font-size: 0.7em; opacity: 0.9; margin-top: 0.1rem;}
 .level-step-item.active .level-range { opacity: 1; }
 
-
-/*
-  *** INICIO DE LA CORRECCIÓN PARA MÓVILES ***
-  Se eliminan los estilos de 'skills-container' y 'toggle-skills-btn'
-  porque fueron reemplazados por <details> y <summary> nativos.
-*/
-
-/* Ítem de habilidad individual (se mantiene) */
+/* Ítem de habilidad individual */
 .skill-item {
     display: flex;
     align-items: flex-start;
@@ -155,8 +200,6 @@ body {
 .competency-card[open] > summary .summary-chevron {
     transform: rotate(180deg);
 }
-/* *** FIN DE LA CORRECCIÓN PARA MÓVILES *** */
-
 
 /* Contenedor puntaje global */
 .global-score-container {
@@ -198,18 +241,14 @@ body {
 }
 #admin-table tbody tr:last-child td { border-bottom: none; }
 
-/* Anchos de columna (ajustados para el nuevo padding) */
-#admin-table th:nth-child(1), #admin-table td:nth-child(1) { width: 4%; text-align: center; } /* Rank */
-#admin-table th:nth-child(2), #admin-table td:nth-child(2) { width: 18%; min-width: 150px; } /* Nombre */
-#admin-table th:nth-child(3), #admin-table td:nth-child(3) { width: 15%; min-width: 140px; } /* Email */
-#admin-table th:nth-child(4), #admin-table td:nth-child(4) { width: 5%; text-align: center; } /* Tipo Doc */
-#admin-table th:nth-child(5), #admin-table td:nth-child(5) { width: 10%; min-width: 90px; } /* Num Doc */
-#admin-table th:nth-child(6), #admin-table td:nth-child(6) { width: 10%; min-width: 90px; } /* Fecha Nac. */
-#admin-table th:nth-child(7), #admin-table td:nth-child(7) { width: 6%; text-align: center; } /* Global */
-#admin-table th:nth-child(n+8):nth-child(-n+12),
-#admin-table td:nth-child(n+8):nth-child(-n+12) { width: 4%; text-align: center; } /* Materias */
-#admin-table th:nth-child(13), #admin-table td:nth-child(13) { width: 10%; min-width: 100px; } /* Municipio */
-#admin-table th:nth-child(14), #admin-table td:nth-child(14) { width: 5%; text-align: center; } /* Acción */
+/* (NUEVO) Anchos de columna Admin simplificados */
+#admin-table th:nth-child(1), #admin-table td:nth-child(1) { width: 30%; min-width: 180px; } /* Nombre */
+#admin-table th:nth-child(2), #admin-table td:nth-child(2) { width: 25%; min-width: 160px; } /* Email */
+#admin-table th:nth-child(3), #admin-table td:nth-child(3) { width: 8%; text-align: center; } /* Tipo Doc */
+#admin-table th:nth-child(4), #admin-table td:nth-child(4) { width: 15%; min-width: 100px; } /* Num Doc */
+#admin-table th:nth-child(5), #admin-table td:nth-child(5) { width: 12%; min-width: 90px; } /* Fecha Nac. */
+#admin-table th:nth-child(6), #admin-table td:nth-child(6) { width: 5%; text-align: center; } /* N° Pruebas */
+#admin-table th:nth-child(7), #admin-table td:nth-child(7) { width: 5%; text-align: center; } /* Acción */
 
 
 .view-report-btn { background-color: var(--brand-secondary); color: white; padding: 0.25rem 0.75rem; border-radius: 99px; font-weight: 500; transition: background-color 0.2s; white-space: nowrap; border: none; cursor: pointer; font-size: 0.8rem; }
@@ -225,15 +264,95 @@ body {
 .back-btn { background-color: var(--brand-secondary); color: white; }
 .back-btn:hover:not(:disabled) { background-color: var(--brand-blue-dark); }
 
-/* Modal Admin */
-#admin-modal-backdrop { position: fixed; inset: 0; background-color: rgba(244, 244, 240, 0.85); display: none; align-items: center; justify-content: center; z-index: 40; backdrop-filter: blur(4px); }
-#admin-modal-container { background-color: var(--brand-surface); border-radius: 1rem; box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1); width: 95%; max-width: 900px; height: 90vh; display: flex; flex-direction: column; border: 1px solid var(--brand-border); transform: scale(0.95) translateY(10px); opacity: 0; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
-#admin-modal-backdrop.shown #admin-modal-container { transform: scale(1) translateY(0); opacity: 1; }
-#admin-modal-header-container { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; border-bottom: 1px solid var(--brand-border); }
-#admin-modal-header { font-size: 1.25rem; font-weight: 700; color: var(--brand-header); }
-#admin-modal-close-btn { background-color: #f3f4f6; color: #6b7280; border: none; border-radius: 99px; width: 2.25rem; height: 2.25rem; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
-#admin-modal-close-btn:hover { background-color: #e5e7eb; color: #1f2937; transform: rotate(90deg); }
-#admin-modal-body { padding: 1rem 1.5rem; overflow-y: auto; flex-grow: 1; background-color: var(--brand-bg); }
+/* (NUEVO) Estilos de Modal genéricos */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(244, 244, 240, 0.85); /* Fondo BG con transparencia */
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 40;
+    backdrop-filter: blur(4px);
+    opacity: 0;
+    transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.modal-backdrop.shown {
+    opacity: 1;
+}
+
+.modal-container {
+    background-color: var(--brand-surface);
+    border-radius: 1rem;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    width: 95%;
+    max-height: 90vh; /* Altura máxima */
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--brand-border);
+    transform: scale(0.95) translateY(10px);
+    opacity: 0;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.modal-backdrop.shown .modal-container {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+}
+
+.modal-header-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--brand-border);
+    flex-shrink: 0; /* Evita que el header se encoja */
+}
+.modal-header {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--brand-header);
+}
+.modal-close-btn {
+    background-color: #f3f4f6;
+    color: #6b7280;
+    border: none;
+    border-radius: 99px;
+    width: 2.25rem;
+    height: 2.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+.modal-close-btn:hover {
+    background-color: #e5e7eb;
+    color: #1f2937;
+    transform: rotate(90deg);
+}
+.modal-body {
+    padding: 1.5rem;
+    overflow-y: auto;
+    flex-grow: 1;
+    background-color: var(--brand-bg);
+}
+/* Scrollbar personalizado para modales */
+.modal-body::-webkit-scrollbar {
+  width: 8px;
+}
+.modal-body::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+.modal-body::-webkit-scrollbar-thumb {
+  background: #d1d5db; 
+  border-radius: 10px;
+}
+.modal-body::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af; 
+}
+
 
 /* Estilos Flatpickr */
 .flatpickr-calendar { background-color: var(--brand-surface); border-radius: 0.75rem; border: 1px solid var(--brand-border); box-shadow: 0 8px 16px rgba(0, 0, 0, 0.08); }
