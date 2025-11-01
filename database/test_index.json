@@ -8,4 +8,12 @@
     "keys_s2": "bd_simulacros/SG11-07/Claves_S2.csv",
     "videos": "videos/bd_retro_sg11_07.txt"
   }
+},
+  "mini_1": {
+    "name": "Minisimulacro 1 (Simulación 120p)",
+    "type": "minisimulacro",
+    "answers": "bd_minisimulacros/mini_1/Respuestas_mini_1.csv",
+    "keys": "bd_minisimulacros/mini_1/Claves_mini_1.csv",
+    "videos": "bd_minisimulacros/mini_1/bd_retro_mini_1.txt"
+  }
 }
