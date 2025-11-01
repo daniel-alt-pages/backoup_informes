@@ -1,0 +1,11 @@
+{
+  "sg11_07": {
+    "name": "Simulacro General SGM 11-07",
+    "type": "simulacro",
+    "answers_s1": "bd_simulacros/SG11-07/Sesion1.csv",
+    "answers_s2": "bd_simulacros/SG11-07/Sesion2.csv",
+    "keys_s1": "bd_simulacros/SG11-07/Claves_S1.csv",
+    "keys_s2": "bd_simulacros/SG11-07/Claves_S2.csv",
+    "videos": "videos/bd_retroalimenteciones.txt"
+  }
+}
