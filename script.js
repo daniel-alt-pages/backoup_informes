@@ -58,12 +58,21 @@ document.addEventListener('DOMContentLoaded', () => {
 /**
  * Carga todos los datos esenciales de la plataforma (CSV y JSON).
  * Esta es la función principal de arranque.
+ * (CORREGIDO v5.1: Se eliminó la función 'showLoading' y se
+ * inlinó la lógica aquí para evitar errores de 'null' en la carga.)
  */
 async function loadAllData() {
     const loadingMessage = document.getElementById('loading-message');
     const loadingError = document.getElementById('loading-error');
     const loadingScreen = document.getElementById('loading-section');
     const loginScreen = document.getElementById('login-section');
+
+    // Asegurarse de que los elementos de carga existen
+    if (!loadingMessage || !loadingError || !loadingScreen || !loginScreen) {
+        console.error("Error fatal: No se encontraron los elementos de la pantalla de carga en el HTML.");
+        alert("Error fatal. No se pudo cargar la aplicación. Faltan elementos de carga.");
+        return;
+    }
 
     try {
         // 1. Cargar el índice de pruebas (JSON)
@@ -118,6 +127,8 @@ async function loadAllData() {
 
 /**
  * Configura todos los listeners de eventos principales de la aplicación.
+ * (CORREGIDO v5.1: Se usa '?' (encadenamiento opcional) en todos los 
+ * listeners para evitar errores si el elemento no existe en la vista actual)
  */
 function setupEventListeners() {
     // Elementos de la UI
@@ -153,7 +164,7 @@ function setupEventListeners() {
     // Formulario de Login
     elements.loginForm?.addEventListener('submit', handleLogin);
 
-    // Botón de ver/ocultar contraseña (NUEVO v5)
+    // Botón de ver/ocultar contraseña
     elements.togglePasswordBtn?.addEventListener('click', togglePasswordVisibility);
 
     // Botones de Logout
@@ -212,7 +223,9 @@ function setupEventListeners() {
     // (CORREGIDO) Añadir '?' para evitar errores si los elementos no existen
     elements.statsSortBy?.addEventListener('change', (e) => {
         // Re-renderizar las tarjetas con el nuevo orden
-        renderStatsCards(CACHED_TEST_DATA.currentStats, e.target.value);
+        if (CACHED_TEST_DATA.currentStats) {
+             renderStatsCards(CACHED_TEST_DATA.currentStats, e.target.value);
+        }
     });
     elements.statsFilterBy?.addEventListener('change', (e) => {
         // Filtrar las tarjetas visibles
@@ -373,7 +386,14 @@ function showStudentDashboard(shouldShow = true) {
     }
     
     // Ordenar informes por fecha (más reciente primero)
-    const sortedReports = [...CURRENT_STUDENT_REPORTS].sort((a, b) => new Date(b.test_date) - new Date(a.test_date));
+    const sortedReports = [...CURRENT_STUDENT_REPORTS].sort((a, b) => {
+        // Manejar fechas inválidas o nulas
+        const dateA = new Date(a.test_date);
+        const dateB = new Date(b.test_date);
+        if (isNaN(dateA)) return 1;
+        if (isNaN(dateB)) return -1;
+        return dateB - dateA;
+    });
 
     sortedReports.forEach(report => {
         const testInfo = TEST_INDEX[report.test_id];
@@ -492,7 +512,7 @@ function renderGrowthChart(studentReports, filterType = 'all') {
             maintainAspectRatio: false,
             scales: {
                 x: {
-                    // (NUEVO) Usar 'time' no funciona bien sin fechas exactas, usar 'category'
+                    // Usar 'category' para mostrar las etiquetas (nombres de prueba)
                     type: 'category', 
                     title: {
                         display: true,
@@ -840,17 +860,27 @@ async function handleAdminModalCardClick(e) {
 // --- 6. VISTA DE INFORME INDIVIDUAL (Estudiante y Admin) ---
 
 /**
- * Muestra el informe detallado de una prueba específica.
- * @param {string} testId - El ID de la prueba (ej. "sg11_07").
+ * (NUEVO v5.1) Función de ayuda para mostrar la carga
+ * dentro de showIndividualReport.
  */
-async function showIndividualReport(testId) {
+function showReportLoading(message) {
     const loadingScreen = document.getElementById('loading-section');
     const loadingMessage = document.getElementById('loading-message');
     const loadingError = document.getElementById('loading-error');
     
+    if(loadingMessage) loadingMessage.textContent = message;
+    if(loadingError) loadingError.style.display = 'none';
+    
     showSection('loading-section');
-    loadingMessage.textContent = 'Cargando datos del informe...';
-    loadingError.style.display = 'none';
+}
+
+/**
+ * Muestra el informe detallado de una prueba específica.
+ * (CORREGIDO v5.1: Se movió la lógica de carga a 'showReportLoading')
+ * @param {string} testId - El ID de la prueba (ej. "sg11_07").
+ */
+async function showIndividualReport(testId) {
+    showReportLoading('Cargando datos del informe...');
 
     try {
         const testInfo = TEST_INDEX[testId];
@@ -915,8 +945,7 @@ async function showIndividualReport(testId) {
         renderRadarChart(radarData, testInfo.name);
 
         // 4. Cargar datos de la prueba (Claves y Respuestas)
-        // (Esta función ahora carga ambas sesiones si es necesario)
-        loadingMessage.textContent = 'Cargando detalle de preguntas...';
+        showReportLoading('Cargando detalle de preguntas...');
         const { studentAnswers, correctKeys, videoLinks } = await loadTestData(testId, CURRENT_STUDENT_DATA['Número de Documento']);
 
         // 5. Configurar Pestañas (Simulacro vs. Minisimulacro)
@@ -972,7 +1001,16 @@ async function showIndividualReport(testId) {
 
     } catch (error) {
         console.error('Error al mostrar el informe:', error);
-        showSection('student-dashboard'); // Volver al dashboard si falla
+        // Mostrar el error en la pantalla de carga
+        const loadingMessage = document.getElementById('loading-message');
+        const loadingError = document.getElementById('loading-error');
+        if(loadingMessage) loadingMessage.textContent = 'Error al cargar el informe.';
+        if(loadingError) {
+            loadingError.textContent = error.message;
+            loadingError.style.display = 'block';
+        }
+        // No volver al dashboard, permitir que el usuario vea el error
+        // showSection('student-dashboard'); 
         alert(`Error al cargar el informe: ${error.message}`);
     }
 }
@@ -1009,8 +1047,6 @@ async function loadTestData(testId, docNumber) {
         }
         
         // 2. Cargar Respuestas (¡TODOS los estudiantes, para el análisis!)
-        // (En el informe individual, solo necesitamos 1 estudiante, pero
-        // lo cargamos todo para el análisis de admin y lo cacheadamos)
         if (isSimulacro) {
             const [ans_s1, ans_s2] = await Promise.all([
                 fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.answers_s1}`),
@@ -1502,64 +1538,86 @@ async function handleAddStudentSubmit(e) {
         // 3. Cargar el contenido actual del CSV si no está en caché
         if (!crudCache.studentDb) {
             statusEl.textContent = 'Cargando base de datos...';
-            const fileData = await getGitHubFile(GITHUB_API_CONFIG.studentDbPath);
-            // Decodificar de Base64 a texto plano
-            crudCache.studentDb = atob(fileData.content);
-            // Guardar el SHA para el commit
-            crudCache.studentDbSha = fileData.sha;
-        }
-
-        // 4. Crear la nueva fila CSV
-        // (Asegurar el orden de columnas del CSV original)
-        const headers = Object.keys(ALL_STUDENTS_ARRAY[0]);
-        const newCsvRow = headers.map(header => `"${newStudent[header] || ''}"`).join(',');
-
-        // 5. Añadir al caché local
-        crudCache.studentDb += `\n${newCsvRow}`;
-        
-        // 6. Configurar el callback y pedir el token
-        afterTokenSuccess = async (token) => {
-            statusEl.textContent = 'Guardando en GitHub...';
+            // (CORREGIDO v5.1) Se debe pedir el token ANTES de leer
+            // si el repositorio es privado.
             
-            // Codificar el nuevo contenido a Base64
-            const newContentBase64 = btoa(crudCache.studentDb);
-
-            // Hacer el commit a GitHub
-            const commitData = await updateGitHubFile(
-                GITHUB_API_CONFIG.studentDbPath,
-                token,
-                `CRUD: Añadido estudiante ${newStudent['Número de Documento']}`,
-                newContentBase64,
-                crudCache.studentDbSha
-            );
-
-            // Actualizar el SHA en caché para el próximo commit
-            crudCache.studentDbSha = commitData.content.sha;
-
-            // Éxito
-            statusEl.textContent = '¡Estudiante añadido con éxito!';
-            statusEl.style.color = 'var(--brand-green)';
-            document.getElementById('add-student-form').reset();
-
-            // Actualizar la DB local de la app
-            STUDENT_DB[newStudent['Número de Documento']] = newStudent;
-            ALL_STUDENTS_ARRAY.push(newStudent);
-            renderAdminTable(); // Re-renderizar la tabla de admin
-        };
-        
-        // 7. Abrir el modal de token
-        openModal(document.getElementById('github-token-modal'));
-        document.getElementById('token-modal-error').style.display = 'none';
-        
-        // (Nota: El botón se reactiva en el 'finally' o en el modal)
+            // Paso 1: Pedir el token
+            afterTokenSuccess = async (token) => {
+                // Paso 2: Ahora que tenemos token, leer el archivo
+                statusEl.textContent = 'Cargando base de datos...';
+                const fileData = await getGitHubFile(GITHUB_API_CONFIG.studentDbPath, token);
+                crudCache.studentDb = atob(fileData.content);
+                crudCache.studentDbSha = fileData.sha;
+                
+                // Paso 3: Proceder con la adición
+                await processNewStudent(newStudent, token, statusEl);
+            };
+            
+            openModal(document.getElementById('github-token-modal'));
+            document.getElementById('token-modal-error').style.display = 'none';
+            // El resto de la lógica se mueve a 'handleConfirmGithubToken' y 'processNewStudent'
+            
+        } else {
+            // El caché ya existe, solo pedir token para escribir
+            afterTokenSuccess = async (token) => {
+                 await processNewStudent(newStudent, token, statusEl);
+            };
+            openModal(document.getElementById('github-token-modal'));
+            document.getElementById('token-modal-error').style.display = 'none';
+        }
         
     } catch (error) {
         console.error('Error al añadir estudiante:', error);
         statusEl.textContent = `Error: ${error.message}`;
         statusEl.style.color = 'var(--brand-red)';
-        buttonEl.disabled = false;
+    } finally {
+         // (v5.1) El botón se reactiva en el modal o en el catch
+         // No reactivarlo aquí, sino en el 'finally' del modal
     }
 }
+
+/**
+ * (NUEVO v5.1) Procesa y guarda al nuevo estudiante
+ * después de que el caché está listo y el token está disponible.
+ */
+async function processNewStudent(newStudent, token, statusEl) {
+     // 1. Crear la nueva fila CSV
+    // (Asegurar el orden de columnas del CSV original)
+    const headers = Object.keys(ALL_STUDENTS_ARRAY[0]);
+    const newCsvRow = headers.map(header => `"${newStudent[header] || ''}"`).join(',');
+
+    // 2. Añadir al caché local
+    crudCache.studentDb += `\n${newCsvRow}`;
+    
+    // 3. Guardar en GitHub
+    statusEl.textContent = 'Guardando en GitHub...';
+    
+    // Codificar el nuevo contenido a Base64
+    const newContentBase64 = btoa(crudCache.studentDb);
+
+    // Hacer el commit a GitHub
+    const commitData = await updateGitHubFile(
+        GITHUB_API_CONFIG.studentDbPath,
+        token,
+        `CRUD: Añadido estudiante ${newStudent['Número de Documento']}`,
+        newContentBase64,
+        crudCache.studentDbSha
+    );
+
+    // 4. Actualizar el SHA en caché para el próximo commit
+    crudCache.studentDbSha = commitData.content.sha;
+
+    // 5. Éxito
+    statusEl.textContent = '¡Estudiante añadido con éxito!';
+    statusEl.style.color = 'var(--brand-green)';
+    document.getElementById('add-student-form').reset();
+
+    // 6. Actualizar la DB local de la app
+    STUDENT_DB[newStudent['Número de Documento']] = newStudent;
+    ALL_STUDENTS_ARRAY.push(newStudent);
+    renderAdminTable(); // Re-renderizar la tabla de admin
+}
+
 
 /**
  * Maneja la confirmación del modal de token.
@@ -1569,6 +1627,7 @@ async function handleConfirmGithubToken() {
     const token = document.getElementById('github-token-input').value;
     const errorEl = document.getElementById('token-modal-error');
     const confirmBtn = document.getElementById('confirm-token-btn');
+    const addStudentBtn = document.getElementById('add-student-btn');
 
     if (!token) {
         errorEl.textContent = 'El token no puede estar vacío.';
@@ -1582,7 +1641,7 @@ async function handleConfirmGithubToken() {
         errorEl.style.display = 'none';
         
         try {
-            // Ejecutar la acción pendiente (ej. guardar estudiante)
+            // Ejecutar la acción pendiente (ej. leer y guardar estudiante)
             await afterTokenSuccess(token);
             
             // Éxito: limpiar token y cerrar modal
@@ -1591,11 +1650,12 @@ async function handleConfirmGithubToken() {
             
         } catch (error) {
             console.error('Error durante la acción (post-token):', error);
-            errorEl.textContent = `Error al guardar: ${error.message}. ¿Token válido?`;
+            errorEl.textContent = `Error: ${error.message}. ¿Token válido?`;
             errorEl.style.display = 'block';
         } finally {
             confirmBtn.disabled = false;
             confirmBtn.textContent = 'Confirmar y Guardar';
+            addStudentBtn.disabled = false; // Reactivar el botón principal
             afterTokenSuccess = null; // Limpiar callback
         }
     }
@@ -1603,60 +1663,32 @@ async function handleConfirmGithubToken() {
 
 /**
  * (Helper API) Obtiene el contenido y 'sha' de un archivo de GitHub.
+ * (CORREGIDO v5.1: Requiere token para leer repos privados)
  * @param {string} filePath - Ruta al archivo en el repo (ej. "database/student_database.csv").
+ * @param {string} token - El GitHub PAT.
  * @returns {Object} - { content, sha }
  */
-async function getGitHubFile(filePath) {
-    // Pedir token si no está en el modal (debe estarlo, pero por si acaso)
-    const token = document.getElementById('github-token-input').value;
+async function getGitHubFile(filePath, token) {
     if (!token) {
-        // En un flujo real, pediríamos el token aquí, pero
-        // para el CRUD de 'add-student', el token se pide *después*.
-        // Para la *primera* carga del caché, necesitamos el token.
-        // Simplificación: Asumimos que el token se pedirá.
-        // Corrección: La primera carga (getGitHubFile) debe ocurrir ANTES de pedir el token.
-        // El flujo en handleAddStudentSubmit es:
-        // 1. getGitHubFile() (sin token, si el repo es público PARA LEER)
-        // 2. openModal() (pedir token para escribir)
-        // 3. updateGitHubFile() (con token)
-        
-        // ¡PROBLEMA! Leer un archivo de un repo PRIVADO requiere token.
-        // Asumiremos que el repo es PÚBLICO para lectura, PRIVADO para escritura.
-        
-        const { owner, repo, branch } = GITHUB_API_CONFIG;
-        const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`;
-
-        const response = await fetch(apiUrl, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/vnd.github.v3+json',
-                'Cache-Control': 'no-cache', // Siempre obtener el más reciente
-                'Pragma': 'no-cache'
-            }
-        });
-        if (!response.ok) {
-            throw new Error(`Error [GET] al leer archivo de GitHub (${filePath}): ${response.statusText}`);
-        }
-        return await response.json(); // Devuelve { content: '...', sha: '...' }
+        throw new Error("Se requiere un token de GitHub para leer el archivo.");
     }
     
-    // Si ya tenemos un token (ej. si el repo es privado)
-    // (Esta lógica es más robusta si el repo es privado)
-    // const { owner, repo, branch } = GITHUB_API_CONFIG;
-    // const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`;
-    // const response = await fetch(apiUrl, {
-    //     method: 'GET',
-    //     headers: {
-    //         'Authorization': `token ${token}`,
-    //         'Accept': 'application/vnd.github.v3+json',
-    //         'Cache-Control': 'no-cache',
-    //         'Pragma': 'no-cache'
-    //     }
-    // });
-    // if (!response.ok) {
-    //     throw new Error(`Error [GET] al leer archivo de GitHub (${filePath}): ${response.statusText}`);
-    // }
-    // return await response.json();
+    const { owner, repo, branch } = GITHUB_API_CONFIG;
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`;
+
+    const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+            'Authorization': `token ${token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Cache-Control': 'no-cache', // Siempre obtener el más reciente
+            'Pragma': 'no-cache'
+        }
+    });
+    if (!response.ok) {
+        throw new Error(`Error [GET] al leer archivo de GitHub (${filePath}): ${response.statusText}`);
+    }
+    return await response.json(); // Devuelve { content: '...', sha: '...' }
 }
 
 
@@ -1664,7 +1696,7 @@ async function getGitHubFile(filePath) {
  * (Helper API) Actualiza (hace commit) de un archivo en GitHub.
  * @param {string} filePath - Ruta al archivo en el repo.
  * @param {string} token - El GitHub PAT.
- * @param {string} commitMessage - Mensaje del commit.
+ *img/Matematicas (logo).svg * @param {string} commitMessage - Mensaje del commit.
  * @param {string} contentBase64 - Contenido del archivo en Base64.
  * @param {string} sha - El SHA del archivo que se está actualizando.
  * @returns {Object} - Datos del commit.
@@ -1712,6 +1744,7 @@ async function fetchAndParseCSV(url) {
                 resolve(results.data);
             },
             error: (error) => {
+                console.error(`Error al parsear CSV desde ${url}:`, error);
                 reject(error);
             }
         });
