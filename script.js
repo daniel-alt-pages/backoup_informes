@@ -41,12 +41,8 @@ let crudCache = {
 // --- 1. INICIALIZACIÓN DE LA APLICACIÓN ---
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Inicializar Flatpickr (Selector de Fecha de Nacimiento)
-    flatpickr("#password", {
-        locale: "es",
-        dateFormat: "d/m/Y",
-        allowInput: true, // Permite escribir la fecha
-    });
+    // (CORREGIDO v5.3) Flatpickr (Selector de Fecha) ELIMINADO
+    // flatpickr("#password", { ... });
     
     // Asignar listeners de eventos
     setupEventListeners();
@@ -102,8 +98,21 @@ async function loadAllData() {
         // Convertir el array de estudiantes en un objeto (mapa) para búsqueda rápida O(1)
         STUDENT_DB = {};
         ALL_STUDENTS_ARRAY = []; // Poblar también el array para el admin
-        studentData.forEach(student => {
-            const docNumber = student['Número de Documento'];
+        
+        // (CORREGIDO v5.2) Limpiar (trim) todos los campos de cada estudiante al cargar
+        studentData.forEach(originalStudent => {
+            
+            const student = {};
+            for (const key in originalStudent) {
+                // Verificar que el valor sea un string antes de hacer trim
+                if (typeof originalStudent[key] === 'string') {
+                    student[key] = originalStudent[key].trim();
+                } else {
+                    student[key] = originalStudent[key];
+                }
+            }
+            
+            const docNumber = student['Número de Documento']; // Ya está trim-eado
             if (docNumber) {
                 STUDENT_DB[docNumber] = student;
                 ALL_STUDENTS_ARRAY.push(student);
