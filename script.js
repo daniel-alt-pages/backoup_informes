@@ -208,6 +208,8 @@ function setupEventListeners() {
 
     // Análisis Estadístico (Admin)
     elements.statsAnalyzeBtn?.addEventListener('click', handleStatsAnalysis);
+    
+    // (CORREGIDO) Añadir '?' para evitar errores si los elementos no existen
     elements.statsSortBy?.addEventListener('change', (e) => {
         // Re-renderizar las tarjetas con el nuevo orden
         renderStatsCards(CACHED_TEST_DATA.currentStats, e.target.value);
