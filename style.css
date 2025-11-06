@@ -1,56 +1,356 @@
-/* Definición de variables CSS para colores de materias */
+/* ESTILOS GLOBALES Y DE DISEÑO (v5)
+    Este archivo contiene los estilos personalizados que Tailwind CSS no puede 
+    generar fácilmente (como variables CSS y estilos de componentes complejos).
+*/
+
+/* --- 1. Definición de Variables de Color (Paleta) --- */
 :root {
+    /* Colores de Marca */
+    --brand-primary: #F97316;    /* Naranja (principalmente para login) */
+    --brand-secondary: #3B82F6; /* Azul (principal para UI) */
+    --brand-blue-dark: #1e40af; /* Azul oscuro (hover) */
+    --brand-bg: #f4f4f0;        /* Fondo general (casi blanco) */
+    --brand-text: #374151;      /* Texto principal (gris oscuro) */
+    --brand-header: #1f2937;    /* Encabezados (casi negro) */
+    --brand-surface: #ffffff;   /* Fondo de tarjetas (blanco) */
+    --brand-border: #e5e7eb;    /* Bordes (gris claro) */
+    --brand-red: #DC2626;       /* Errores */
+    --brand-green: #16A34A;     /* Aciertos */
+
+    /* Colores de Materias (Usados por JS) */
     --color-lectura: #0284c7;
     --color-matematicas: #dc2626;
     --color-sociales: #ca8a04;
     --color-ciencias: #16a34a;
     --color-ingles: #9333ea;
-    --brand-primary: #F97316;
-    --brand-secondary: #3B82F6;
-    --brand-blue-dark: #1e40af;
-    --brand-bg: #f4f4f0;
-    --brand-text: #374151;
-    --brand-header: #1f2937;
-    --brand-surface: #ffffff;
-    --brand-border: #e5e7eb;
-    --brand-red: #DC2626;
-    --brand-green: #16A34A;
 }
 
-/* Estilos base y fuentes */
+/* --- 2. Estilos Base y Tipografía --- */
 body {
     font-family: 'Inter', sans-serif;
     background-color: var(--brand-bg);
     color: var(--brand-text);
-    overflow-x: hidden; /* Evita scroll horizontal */
+    overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    font-size: 15px; /* Ligeramente más grande para legibilidad */
+    font-size: 15px;
     line-height: 1.6;
 }
-/* Contenedor principal */
+
+/* Contenedor principal para centrar el contenido */
 .main-container {
-    max-width: 1400px;
-    margin: 0 auto;
+    max-width: 1600px;
+    margin-left: auto;
+    margin-right: auto;
 }
 
-/* Estilos de Formularios */
-.form-input {
-    width: 100%;
-/* ... existing code ... -->
-    font-size: 1rem;
-}
-.form-input:focus {
-/* ... existing code ... -->
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+/* --- 3. Estilos de Formularios (Inputs, Selects, Botones) --- */
+.form-input, .form-select {
+    @apply w-full px-3 py-2 border border-brand-border rounded-md shadow-sm 
+           transition duration-200;
+    @apply focus:outline-none focus:ring-2 focus:ring-brand-secondary focus:border-transparent;
 }
 
-/* (NUEVO) Asegurar que el input de contraseña tenga padding
-   (aunque se añadió 'pr-10' en el HTML, esto es un fallback) */
-#password {
-    padding-right: 3rem; 
+.form-label {
+    @apply block text-sm font-medium text-brand-text mb-1;
 }
 
-/* Estilos de la tabla de administrador */
-.admin-table-header {
-/* ... existing code ... -->
+.btn-primary {
+    @apply bg-brand-secondary hover:bg-brand-blue-dark text-white font-bold py-2 px-4 rounded-md 
+           transition duration-200 ease-in-out shadow-sm;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-secondary {
+    @apply bg-brand-primary hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-md 
+           transition duration-200 ease-in-out shadow-sm;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-secondary-outline {
+    @apply bg-brand-surface border border-brand-border text-brand-text hover:bg-gray-50 
+           font-medium py-2 px-4 rounded-md transition duration-200 ease-in-out 
+           shadow-sm flex items-center justify-center;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+/* --- 4. Estilos de Tarjetas (Reportes, Materias, KPIs) --- */
+
+/* Tarjeta de Informe (Dashboard de Estudiante) */
+.report-card {
+    @apply bg-brand-surface rounded-xl shadow-lg transition-all duration-300 ease-in-out 
+           overflow-hidden cursor-pointer flex flex-col;
+}
+.report-card:hover {
+    @apply shadow-xl transform -translate-y-1;
+}
+.report-card-header {
+    @apply p-5 border-b border-brand-border flex justify-between items-start;
+}
+.report-card-title {
+    @apply text-lg font-bold text-brand-header;
+}
+.report-card-badge {
+    @apply text-xs font-semibold px-2.5 py-0.5 rounded-full;
+    /* Colores aplicados por JS (bg-blue-100 text-blue-800 o bg-purple-100 text-purple-800) */
+}
+.report-card-body {
+    @apply p-5 flex-grow;
+}
+.report-card-score {
+    @apply flex justify-between items-center mb-2;
+}
+.report-card-score .global-score {
+    @apply text-3xl font-extrabold text-brand-secondary;
+}
+.report-card-date {
+    @apply text-sm text-gray-500 mt-4;
+}
+
+/* Tarjeta de Informe (Modal de Admin) */
+.admin-report-card {
+    /* Hereda .report-card, no necesita estilos adicionales por ahora */
+}
+
+/* Tarjeta de Puntaje Global (Vista de Informe) */
+.report-card-primary {
+    @apply bg-brand-surface rounded-xl shadow-lg p-6 flex flex-col justify-between;
+}
+
+/* Tarjeta de Materia (Vista de Informe) */
+.subject-card {
+    @apply bg-brand-surface rounded-xl shadow-lg p-5 transition-all duration-300;
+    /* La variable --subject-color se establece por JS */
+    border-left: 5px solid var(--subject-color);
+}
+.subject-card:hover {
+    @apply shadow-xl;
+}
+.subject-card-header {
+    @apply flex items-center space-x-3 mb-3;
+}
+.subject-card-icon {
+    @apply w-8 h-8;
+}
+.subject-card-title {
+    @apply text-xl font-bold text-brand-header;
+}
+.subject-card-score {
+    @apply text-3xl font-bold text-brand-header mb-2;
+}
+.subject-card-bar-container {
+    @apply w-full bg-gray-200 rounded-full h-2;
+}
+.subject-card-bar {
+    @apply h-2 rounded-full;
+    background-color: var(--subject-color);
+}
+.subject-card-footer {
+    @apply flex justify-between items-center text-sm text-gray-500 mt-2;
+}
+
+/* Tarjeta de KPI (Dashboard de Admin) */
+.kpi-card {
+    @apply bg-brand-surface rounded-xl shadow-lg p-5 flex items-center;
+}
+.kpi-icon-container {
+    @apply flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full;
+    /* Colores aplicados en HTML (bg-blue-100 text-blue-600) */
+}
+
+/* --- 5. Estilos de Pestañas (Tabs) --- */
+
+/* Pestañas de Admin (Dashboard) */
+.admin-tab-btn {
+    @apply whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm;
+    @apply text-gray-500 hover:text-gray-700 hover:border-gray-300;
+}
+.admin-tab-btn.active {
+    @apply border-brand-secondary text-brand-secondary;
+}
+
+/* Pestañas de Informe (Vista de Informe) */
+.report-tab-btn {
+    @apply whitespace-nowrap py-3 px-4 border-b-2 font-medium text-lg;
+    @apply text-gray-500 hover:text-gray-700 hover:border-gray-300;
+}
+.report-tab-btn.active {
+    @apply border-brand-secondary text-brand-secondary;
+}
+
+/* Pestañas de CRUD (Admin) */
+.crud-tab-btn {
+    @apply whitespace-nowrap pb-2 px-1 border-b-2 font-medium text-sm;
+    @apply text-gray-500 hover:text-gray-700 hover:border-gray-300;
+}
+.crud-tab-btn.active {
+    @apply border-brand-secondary text-brand-secondary;
+}
+
+/* --- 6. Estilos de Tabla (Admin) --- */
+.admin-table {
+    @apply min-w-full divide-y divide-brand-border;
+}
+.admin-th {
+    @apply px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider;
+}
+.admin-th span { /* Para el indicador de orden (sort) */
+    @apply ml-1;
+}
+.admin-td {
+    @apply px-4 py-4 whitespace-nowrap text-sm;
+}
+
+/* --- 7. Estilos de Modales --- */
+.modal-backdrop {
+    @apply fixed inset-0 z-40 bg-black bg-opacity-60 flex items-start justify-center p-4 
+           overflow-y-auto transition-opacity duration-300;
+    /* Corrección de Bug: Asegura que el modal esté visible */
+    @apply opacity-100;
+}
+.modal-container {
+    @apply bg-brand-surface rounded-xl shadow-2xl w-full my-8 
+           transform transition-all duration-300;
+    /* Corrección de Bug: Asegura que el modal esté visible y centrado */
+    @apply opacity-100 translate-y-0;
+}
+/* Ocultar modal (controlado por JS) */
+.modal-backdrop.hidden {
+    @apply opacity-0 pointer-events-none;
+}
+.modal-backdrop.hidden .modal-container {
+    @apply opacity-0 -translate-y-8;
+}
+
+.modal-header-container {
+    @apply flex justify-between items-center p-5 border-b border-brand-border;
+}
+.modal-header {
+    @apply text-xl font-bold text-brand-header;
+}
+.modal-close-btn {
+    @apply text-gray-400 hover:text-gray-600 transition-colors;
+}
+
+/* --- 8. Estilos de Retroalimentación (Preguntas y Videos) --- */
+
+/* Lista de Preguntas */
+.question-list-container {
+    @apply bg-brand-surface rounded-xl shadow-lg overflow-hidden border border-brand-border;
+}
+.question-row {
+    @apply flex flex-col md:flex-row items-center p-4 border-b border-brand-border;
+}
+.question-row:last-child {
+    @apply border-b-0;
+}
+.question-row.correct {
+    @apply bg-green-50;
+}
+.question-row.incorrect {
+    @apply bg-red-50;
+}
+.question-info {
+    @apply flex-1 mb-2 md:mb-0;
+}
+.question-title {
+    @apply font-bold text-brand-header;
+}
+.question-subject {
+    @apply text-sm font-medium text-gray-500;
+}
+.question-answers {
+    @apply flex flex-wrap gap-x-4 gap-y-1 text-sm;
+}
+.question-status-icon {
+    @apply w-14 h-14 flex-shrink-0 flex items-center justify-center rounded-full text-white text-xl font-bold;
+    /* Color (bg-brand-green o bg-brand-red) aplicado por JS */
+}
+
+/* Rejilla de Videos */
+.video-grid {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4;
+}
+.video-card {
+    @apply bg-brand-surface rounded-xl shadow-md overflow-hidden transition-all duration-300;
+    @apply border border-brand-border;
+}
+.video-card:hover {
+    @apply shadow-xl transform -translate-y-0.5;
+}
+.video-thumbnail-link {
+    @apply block relative;
+}
+.video-thumbnail {
+    @apply w-full aspect-video object-cover bg-gray-200;
+}
+.video-play-icon {
+    @apply absolute inset-0 flex items-center justify-center;
+    @apply text-white text-opacity-80;
+    background-color: rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+.video-card:hover .video-play-icon {
+    @apply opacity-100;
+}
+.video-info {
+    @apply p-4;
+}
+.video-title {
+    @apply font-bold text-brand-header leading-tight;
+}
+.video-subject {
+    @apply text-sm font-medium text-gray-500 mt-1;
+}
+
+/* --- 9. Estilos de Análisis Estadístico (NUEVO v5) --- */
+
+/* Tarjeta de Estadística (Admin) */
+.stat-card {
+    @apply bg-brand-surface rounded-lg shadow-md border border-brand-border overflow-hidden;
+}
+.stat-card-header {
+    @apply flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-gray-50 border-b border-brand-border;
+}
+.stat-card-title {
+    @apply text-base font-bold text-brand-header;
+}
+.stat-card-tag {
+    @apply text-xs font-semibold px-2.5 py-0.5 rounded-full mt-2 sm:mt-0;
+    /* Colores (bg-red-100, etc.) aplicados por JS */
+}
+.stat-card-body {
+    @apply p-4 space-y-2;
+}
+.stat-distractor {
+    @apply opacity-70; /* Por defecto, atenuado */
+}
+.stat-distractor.correct {
+    @apply opacity-100; /* Resaltar la correcta */
+}
+.stat-distractor-label {
+    @apply flex justify-between text-sm font-medium text-brand-text mb-1;
+}
+.stat-distractor.correct .stat-distractor-label {
+    @apply text-brand-green font-bold;
+}
+.stat-distractor-bar-container {
+    @apply w-full bg-gray-200 rounded-full h-2.5;
+}
+.stat-distractor-bar {
+    @apply h-2.5 rounded-full bg-gray-400;
+    /* Ancho y color de fondo (para correcta/distractor principal) aplicado por JS */
+}
+.stat-card-footer {
+    @apply p-4 bg-gray-50 border-t border-brand-border text-sm text-gray-600 font-medium;
+}
+
+/* Filtro de Gráfico (Activo) */
+.chart-filter-btn {
+    @apply bg-brand-surface border border-brand-border text-brand-text hover:bg-gray-50 
+           font-medium py-1.5 px-4 rounded-md transition duration-200 ease-in-out;
+}
+.chart-filter-btn.active {
+    @apply bg-brand-secondary text-white border-brand-secondary;
+}
