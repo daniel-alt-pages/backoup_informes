@@ -7,8 +7,7 @@
     "keys_s1": "bd_simulacros/SG11-07/Claves_S1.csv",
     "keys_s2": "bd_simulacros/SG11-07/Claves_S2.csv",
     "videos": "videos/bd_retro_sg11_07.txt"
-  }
-},
+  },
   "mini_1": {
     "name": "Minisimulacro 1 (Simulación 120p)",
     "type": "minisimulacro",
