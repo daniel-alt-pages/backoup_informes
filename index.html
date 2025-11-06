@@ -3,620 +3,503 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Informe Estudiante / Admin - Saber 11</title>
-
+    <title>Plataforma de Informes v6</title>
+    
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Fuentes -->
+    
+    <!-- PapaParse (Lector de CSV) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.3.2/papaparse.min.js"></script>
+    
+    <!-- Chart.js (Gráficos) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Fuentes (Inter) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
-    <!-- (CORREGIDO v5.3) Flatpickr (Selector de Fecha) ELIMINADO para evitar conflictos con el 'ojo' -->
-    <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"> -->
+    <!-- Iconos (Lucide) -->
+    <script src="https://unpkg.com/lucide-dev@latest"></script>
     
-    <!-- Chart.js (Gráficos) -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Adaptador de fecha para Chart.js (Requerido para la gráfica de crecimiento) -->
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script> 
-    <script src="https://cdn.jsdelivr.net/npm/date-fns"></script>
-    <!-- PapaParse (Lector de CSV) -->
-    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-    
+    <!-- Estilos CSS -->
+    <link rel="stylesheet" href="style.css">
+
     <script>
-        // Configuración de Tailwind CSS
+        // Configuración de Tailwind CSS (Colores del PDF)
         tailwind.config = {
             theme: {
                 extend: {
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
                     colors: {
                         'brand-primary': '#F97316',
                         'brand-secondary': '#3B82F6',
                         'brand-blue-dark': '#1e40af',
-                        'brand-bg': '#f4f4f0',
+                        'brand-bg': '#f8f9fa', // Fondo más limpio (casi blanco)
+                        'brand-sidebar': '#111827', // Sidebar oscuro
+                        'brand-sidebar-hover': '#1f2937',
+                        'brand-sidebar-text': '#d1d5db',
+                        'brand-sidebar-active': '#3B82F6',
                         'brand-text': '#374151',
                         'brand-header': '#1f2937',
                         'brand-surface': '#ffffff',
                         'brand-border': '#e5e7eb',
                         'brand-red': '#DC2626',
                         'brand-green': '#16A34A',
-                        // Colores por materia
-                        'm-lectura': '#0284c7',
-                        'm-matematicas': '#dc2626',
-                        'm-sociales': '#ca8a04',
-                        'm-ciencias': '#16a34a',
-                        'm-ingles': '#9333ea',
+                        'brand-yellow': '#ca8a04',
+                        'brand-purple': '#9333ea',
                     }
                 }
             }
-        }
+        };
     </script>
-    <link rel="stylesheet" href="style.css">
 </head>
+<body class="bg-brand-bg text-brand-text font-['Inter']">
 
-<body class="bg-brand-bg text-brand-text">
+    <!-- ========== PANTALLA DE CARGA INICIAL ========== -->
+    <section id="loading-section" class="fixed inset-0 flex flex-col items-center justify-center bg-brand-surface z-50">
+        <svg class="animate-spin h-10 w-10 text-brand-secondary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <h2 id="loading-message" class="text-xl font-semibold text-brand-header mt-6">Cargando...</h2>
+        <p id="loading-error" class="text-brand-red mt-2" style="display: none;"></p>
+    </section>
 
-    <!-- Contenedor Principal -->
-    <div class="main-container min-h-screen">
-
-        <!-- ========== 1. PANTALLA DE LOGIN ========== -->
-        <section id="login-section" class="w-full max-w-md mx-auto py-12 px-4">
-            <header class="text-center mb-8">
-                <img src="img/Saber 11 (logo).svg" alt="Logo" class="w-24 h-24 mx-auto mb-4">
-                <h1 class="text-3xl font-bold text-brand-header">Plataforma de Informes</h1>
-                <p class="text-lg text-brand-text mt-2">Accede a tus resultados</p>
-            </header>
+    <!-- ========== PANTALLA DE LOGIN ========== -->
+    <section id="login-section" class="min-h-screen flex items-center justify-center bg-gray-100 py-12 px-4 sm:px-6 lg:px-8" style="display: none;">
+        <div class="max-w-md w-full space-y-8">
+            <div>
+                <svg class="mx-auto h-12 w-auto text-brand-secondary" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1.3.6 2.5 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+                <h2 class="mt-6 text-center text-3xl font-extrabold text-brand-header">
+                    Plataforma de Informes
+                </h2>
+                <p class="mt-2 text-center text-sm text-gray-600">
+                    Accede a tus resultados
+                </p>
+            </div>
             
-            <form id="login-form" class="bg-brand-surface p-6 md:p-8 rounded-xl shadow-lg">
-                <div class="mb-4">
-                    <label for="doc-type" class="block text-sm font-medium mb-1">Tipo de Documento</label>
-                    <select id="doc-type" class="form-select w-full">
-                        <option value="TI">Tarjeta de Identidad (TI)</option>
-                        <option value="CC">Cédula de Ciudadanía (CC)</option>
-                        <option value="CE">Cédula de Extranjería (CE)</option>
-                        <option value="PEP">PEP</option>
-                        <option value="PPT">PPT</option>
+            <form id="login-form" class="mt-8 space-y-6 bg-white p-8 shadow-xl rounded-2xl">
+                <div>
+                    <label for="doc-type" class="block text-sm font-medium text-gray-700">Tipo de Documento</label>
+                    <select id="doc-type" required class="form-input mt-1 block w-full">
+                        <option>Tarjeta de Identidad (TI)</option>
+                        <option>Cédula de Ciudadanía (CC)</option>
+                        <option>Cédula de Extranjería (CE)</option>
+                        <option>PEP</option>
+                        <option>PPT</option>
                     </select>
                 </div>
 
-                <div class="mb-4">
-                    <label for="doc-number" class="block text-sm font-medium mb-1">Número de Documento</label>
-                    <input type="text" id="doc-number" class="form-input w-full" placeholder="Tu número de documento" required>
+                <div>
+                    <label for="doc-number" class="block text-sm font-medium text-gray-700">Número de Documento</label>
+                    <input type="text" id="doc-number" class="form-input mt-1 block w-full" required>
                 </div>
 
-                <div class="mb-6">
-                    <label for="password" class="block text-sm font-medium mb-1">Contraseña (Fecha de Nacimiento)</label>
-                    <!-- Contenedor del ojo (NUEVO) -->
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700">Contraseña (Fecha de Nacimiento)</label>
                     <div class="relative">
-                        <input type="password" id="password" class="form-input w-full pr-10" placeholder="DD/MM/YYYY o Contraseña Admin" required>
+                        <input type="password" id="password" class="form-input w-full pr-10 mt-1" placeholder="DD/MM/YYYY o Contraseña Admin" required>
                         <button type="button" id="toggle-password" class="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-brand-secondary" title="Mostrar/Ocultar contraseña">
                             <!-- Ojo Abierto (default) -->
-                            <svg id="eye-open" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                                <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.022 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                            <svg id="eye-open" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                             </svg>
                             <!-- Ojo Cerrado (oculto) -->
-                            <svg id="eye-closed" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" viewBox="0 0 20 20" fill="currentColor">
-                                <path fill-rule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074L3.707 2.293zm5.72 7.007a2 2 0 00-2.828-2.828l-1.414-1.414A4 4 0 009.172 6a4 4 0 014.242 4.243l-1.414-1.414zM10 17a9.958 9.958 0 01-4.512-1.074l-1.473 1.473a1 1 0 01-1.414-1.414l14-14a1 1 0 011.414 1.414L11.473 14.473A9.986 9.986 0 0110 17z" clip-rule="evenodd" />
-                                <path d="M11.473 14.473A2 2 0 018.646 11.646l-1.414 1.414a4 4 0 005.656 0l-1.414-1.414z" />
+                            <svg id="eye-closed" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 1.274-4.057 5.064-7 9.542-7 1.866 0 3.627.624 5.013 1.687" />
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M17.606 6.394A8.025 8.025 0 0119.5 12a10.05 10.05 0 01-1.318 5.087m-3.415-1.391a3 3 0 11-4.242-4.243m4.242 4.243L6.393 6.393" />
                             </svg>
                         </button>
                     </div>
                 </div>
                 
-                <button type="submit" class="w-full btn-primary">
-                    Ingresar
-                </button>
+                <p id="login-error" class="text-sm text-brand-red text-center" style="display: none;">
+                    ¡Error! Documento o contraseña incorrectos.
+                </p>
+
+                <div>
+                    <button type="submit" class="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-brand-secondary hover:bg-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue-dark transition-all duration-200">
+                        Ingresar
+                    </button>
+                </div>
             </form>
+        </div>
+    </section>
 
-            <p id="login-error" class="text-center text-brand-red font-medium mt-4 hidden">
-                ¡Error! Documento o contraseña incorrectos.
-            </p>
-        </section>
 
-        <!-- ========== 2. PANTALLA DE CARGA GLOBAL ========== -->
-        <section id="loading-section" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-brand-bg text-center">
-            <svg class="h-12 w-12 animate-spin text-brand-secondary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <h2 id="loading-title" class="text-2xl font-bold text-brand-header mt-6">Cargando...</h2>
-            <p id="loading-message" class="text-lg text-brand-text mt-2">Estamos preparando tus informes.</p>
-            <p id="loading-error" class="text-lg text-brand-red font-semibold mt-4 hidden" data-cy="loading-error-message">
-                Error al cargar datos. Revisa la consola y recarga la página.
-            </p>
-        </section>
+    <!-- ========== LAYOUT DEL DASHBOARD (v6) ========== -->
+    <!-- (Oculto por defecto, se muestra al hacer login) -->
+    <div id="dashboard-layout" class="hidden">
 
-        <!-- ========== 3. DASHBOARD DEL ESTUDIANTE ========== -->
-        <section id="student-dashboard" class="hidden py-8 px-4 md:px-6">
-            <header class="w-full max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
-                <div>
-                    <h1 id="student-name-header" class="text-3xl font-bold text-brand-header">Hola, [Estudiante]</h1>
-                    <p class="text-lg text-brand-text">Este es tu historial de informes.</p>
+        <!-- ===== BARRA LATERAL (SIDEBAR) ===== -->
+        <div id="sidebar" class="sidebar-container">
+            <div class="flex flex-col h-full">
+                <!-- Logo y Cabecera del Sidebar -->
+                <div class="px-6 py-5 flex items-center gap-3 border-b border-gray-700">
+                    <svg class="h-8 w-8 text-brand-primary" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1.3.6 2.5 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+                    <span class="text-white text-xl font-bold">Informes</span>
                 </div>
-                <div class="flex gap-2">
-                    <button id="view-growth-chart-btn" class="btn-secondary">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 110 2H3a1 1 0 01-1-1zm5 0a1 1 0 011-1h2a1 1 0 110 2H8a1 1 0 01-1-1zm5 0a1 1 0 011-1h2a1 1 0 110 2h-2a1 1 0 01-1-1zm-2-7a.997.997 0 00.707-.293l2-2a1 1 0 10-1.414-1.414l-2 2A1 1 0 009.586 3a1 1 0 000 1.414.997.997 0 00.707.293zM3 4.586A1 1 0 003 3a.997.997 0 00-.707.293l-2 2a1 1 0 101.414 1.414l2-2A1 1 0 003 4.586zM17 4.586a1 1 0 000-1.414.997.997 0 00-.707-.293l-2 2a1 1 0 101.414 1.414l2-2A1 1 0 0017 4.586zM10 15a1 1 0 00-1 1v2a1 1 0 102 0v-2a1 1 0 00-1-1z"/></svg>
-                        Ver Progreso
-                    </button>
-                    <button id="student-logout-btn" class="btn-secondary-outline" title="Cerrar Sesión">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd" /></svg>
-                    </button>
+
+                <!-- Perfil del Usuario (Se llena con JS) -->
+                <div id="user-profile-sidebar" class="px-6 py-5 space-y-1 border-b border-gray-700">
+                    <p class="text-sm font-medium text-white" id="sidebar-username">Cargando...</p>
+                    <p class="text-xs text-gray-400" id="sidebar-userrole">Estudiante</p>
                 </div>
-            </header>
-            
-            <!-- Contenedor de Informes (Tarjetas) -->
-            <div id="reports-grid" class="w-full max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <!-- Las tarjetas de informes se insertarán aquí dinámicamente -->
-                <!-- Ejemplo de tarjeta (HTML dinámico):
-                <div class="report-card" data-testid="sg11_07">
-                    <div class="report-card-header">
-                        <h3 class="report-card-title">Simulacro General SGM 11-07</h3>
-                        <span class="report-card-badge">Simulacro</span>
-                    </div>
-                    <div class="report-card-body">
-                        <div class="report-card-score">
-                            <span>Puntaje Global</span>
-                            <span class="global-score">353</span>
-                        </div>
-                        <p class="report-card-date">Fecha: 10/08/2025</p>
-                    </div>
+
+                <!-- Navegación Principal -->
+                <nav class="flex-1 space-y-1 px-4 py-4">
+                    
+                    <!-- VISTAS DE ESTUDIANTE -->
+                    <a href="#" id="nav-student-dashboard" class="sidebar-link">
+                        <i data-lucide="layout-dashboard"></i>
+                        <span>Mis Informes</span>
+                    </a>
+
+                    <!-- VISTAS DE ADMIN -->
+                    <a href="#" id="nav-admin-dashboard" class="sidebar-link">
+                        <i data-lucide="bar-chart-3"></i>
+                        <span>Dashboard General</span>
+                    </a>
+                    <a href="#" id="nav-admin-students" class="sidebar-link">
+                        <i data-lucide="users"></i>
+                        <span>Gestión de Estudiantes</span>
+                    </a>
+                    <a href="#" id="nav-admin-stats" class="sidebar-link">
+                        <i data-lucide="pie-chart"></i>
+                        <span>Análisis de Ítems</span>
+                    </a>
+                    <a href="#" id="nav-admin-crud" class="sidebar-link">
+                        <i data-lucide="file-plus"></i>
+                        <span>Añadir Estudiante</span>
+                    </a>
+                </nav>
+
+                <!-- Botón de Salir -->
+                <div class="px-4 py-4 border-t border-gray-700">
+                    <a href="#" id="logout-button" class="sidebar-link hover:bg-brand-red/20 hover:text-brand-red">
+                        <i data-lucide="log-out"></i>
+                        <span>Cerrar Sesión</span>
+                    </a>
                 </div>
-                -->
             </div>
-        </section>
+        </div>
 
-        <!-- ========== 4. DASHBOARD DEL ADMINISTRADOR ========== -->
-        <section id="admin-dashboard" class="hidden py-8 px-4 md:px-6">
-            <header class="w-full max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center mb-8 gap-4">
-                <div>
-                    <h1 class="text-3xl font-bold text-brand-header">Panel de Administración</h1>
-                    <p class="text-lg text-brand-text">Gestión y análisis de la plataforma.</p>
-                </div>
-                <button id="admin-logout-btn" class="btn-secondary-outline">
-                    <span>Cerrar Sesión</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-1" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd" /></svg>
-                </button>
-            </header>
+        <!-- Botón para abrir Sidebar en móvil -->
+        <button id="mobile-sidebar-toggle" class="fixed top-4 left-4 z-40 p-2 bg-brand-surface rounded-md shadow-lg lg:hidden">
+            <i data-lucide="menu"></i>
+        </button>
 
-            <div class="w-full max-w-7xl mx-auto">
-                <!-- (NUEVO) Tarjetas de Métricas Clave (KPIs) -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                    <div class="kpi-card">
-                        <div class="kpi-icon-container bg-blue-100 text-blue-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-1.657-1.343-3-3-3s-3 1.343-3 3v2m6 0H9m12-13.5v-2.25A2.25 2.25 0 0016.5 2.25h-9A2.25 2.25 0 005.25 4.5v2.25m13.5 0v5.25A2.25 2.25 0 0116.5 12h-9A2.25 2.25 0 015.25 9.75V4.5m13.5 0h-9" /></svg>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-500">Estudiantes Totales</p>
-                            <p id="kpi-total-students" class="text-2xl font-bold text-brand-header">0</p>
-                        </div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-icon-container bg-green-100 text-green-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-500">Pruebas Registradas</p>
-                            <p id="kpi-total-tests" class="text-2xl font-bold text-brand-header">0</p>
-                        </div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-icon-container bg-yellow-100 text-yellow-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path stroke-linecap="round" stroke-linejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" /></svg>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-500">Promedio (Simulacros)</p>
-                            <p id="kpi-avg-simulacro" class="text-2xl font-bold text-brand-header">0</p>
-                        </div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-icon-container bg-purple-100 text-purple-600">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118L2.98 9.098c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.95-.69l1.52-4.674z" /></svg>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-500">Promedio (Minis)</p>
-                            <p id="kpi-avg-mini" class="text-2xl font-bold text-brand-header">0</p>
-                        </div>
-                    </div>
-                </div>
 
-                <!-- Contenedor con pestañas (Tabs) -->
-                <div class="bg-brand-surface rounded-lg shadow-lg">
-                    <!-- Navegación de Pestañas -->
-                    <div class="border-b border-brand-border">
-                        <nav id="admin-tabs" class="-mb-px flex space-x-6" aria-label="Tabs">
-                            <!-- Pestañas generadas por JS -->
-                        </nav>
+        <!-- ===== CONTENIDO PRINCIPAL (MAIN CONTENT) ===== -->
+        <div id="main-content" class="main-content-container">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+                <!-- ===== SECCIÓN: DASHBOARD ESTUDIANTE ===== -->
+                <section id="student-dashboard-section" class="dashboard-panel">
+                    <h1 class="text-3xl font-bold text-brand-header mb-2">Mis Informes</h1>
+                    <p class="text-lg text-gray-600 mb-8">Revisa tu historial de simulacros y tu progreso.</p>
+                    
+                    <!-- Historial de Informes -->
+                    <div id="student-reports-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <!-- Tarjetas de informes se insertan aquí -->
+                        <!-- Ejemplo de Tarjeta:
+                        <div class="report-card">
+                            <h3 class="text-lg font-bold text-brand-header">Simulacro General SGM 11-07</h3>
+                            <p class="text-sm text-gray-500 mb-4">Realizado el: 10/08/2025</p>
+                            <div class="mb-4">
+                                <p class="text-sm font-medium">Puntaje Global</p>
+                                <p class="text-3xl font-bold text-brand-secondary">353</p>
+                            </div>
+                            <button class="btn-primary w-full">Ver Informe Detallado</button>
+                        </div>
+                        -->
                     </div>
                     
-                    <!-- Contenido de las Pestañas -->
-                    <div class="p-4 md:p-6">
-                        
-                        <!-- Pestaña 1: Gestión de Estudiantes -->
-                        <div id="tab-panel-students" class="admin-tab-panel">
-                            <!-- Encabezado y Búsqueda -->
-                            <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-                                <h3 class="text-xl font-bold text-brand-header">Lista de Estudiantes</h3>
-                                <div class="w-full md:w-1/3">
-                                    <input type="text" id="admin-search-input" class="form-input w-full" placeholder="Buscar por nombre o documento...">
-                                </div>
-                            </div>
-                            
-                            <!-- Tabla de Estudiantes -->
-                            <div class="overflow-x-auto">
-                                <table class="admin-table">
-                                    <thead class="bg-gray-50">
-                                        <tr>
-                                            <th class_alias="admin-th cursor-pointer" data-sort="Nombre Completo del Estudiante">Nombre <span></span></th>
-                                            <th class_alias="admin-th cursor-pointer" data-sort="Número de Documento">Documento <span></span></th>
-                                            <th class_alias="admin-th cursor-pointer" data-sort="Email">Email <span></span></th>
-                                            <th class_alias="admin-th cursor-pointer" data-sort="Colegio/institución">Colegio <span></span></th>
-                                            <th class_alias="admin-th">Acciones</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="admin-table-body" class="bg-white divide-y divide-brand-border">
-                                        <!-- Filas generadas por JS -->
-                                    </tbody>
-                                </table>
-                            </div>
-                            
-                            <!-- Paginación -->
-                            <div id="admin-pagination" class="flex justify-between items-center mt-4">
-                                <!-- Paginación generada por JS -->
-                            </div>
+                    <!-- Gráfico de Crecimiento (en un panel separado) -->
+                    <div class="bg-brand-surface p-6 rounded-2xl shadow-lg mt-8">
+                        <h2 class="text-2xl font-bold text-brand-header mb-6">Evolución de Puntaje Global</h2>
+                        <!-- (MEJORA 2) Filtros del Gráfico -->
+                        <div id="growth-chart-filters" class="flex justify-center gap-2 mb-4 flex-wrap">
+                            <button class="chart-filter-btn active" data-filter="all">Ver Todo</button>
+                            <button class="chart-filter-btn" data-filter="simulacro">Simulacros</button>
+                            <button class="chart-filter-btn" data-filter="minisimulacro">Minisimulacros</button>
                         </div>
-
-                        <!-- Pestaña 2: Análisis Estadístico (NUEVO) -->
-                        <div id="tab-panel-stats" class="admin-tab-panel hidden">
-                            <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-                                <h3 class="text-xl font-bold text-brand-header">Análisis Estadístico de Ítems</h3>
-                                <div class="flex-grow flex flex-col sm:flex-row gap-4 w-full md:w-auto">
-                                    <select id="stats-test-select" class="form-select flex-grow">
-                                        <option value="">Cargando pruebas...</option>
-                                    </select>
-                                    <button id="stats-analyze-btn" class="btn-primary w-full sm:w-auto px-6">
-                                        Analizar
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- Contenedor de Carga (Spinner) -->
-                            <div id="stats-loading" class="text-center py-10 hidden">
-                                <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] text-brand-secondary motion-reduce:animate-[spin_1.5s_linear_infinite]" role="status"></div>
-                                <p class="mt-2 text-gray-600">Procesando miles de respuestas, esto puede tardar un momento...</p>
-                            </div>
-
-                            <!-- Contenedor de Resultados (NUEVAS TARJETAS VISUALES) -->
-                            <div id="stats-results-container" class="hidden">
-                                <h4 id="stats-results-title" class="text-lg font-semibold text-brand-header mb-4">Resultados de Análisis</h4>
-                                <!-- Filtros (NUEVO) -->
-                                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-4">
-                                    <div class="flex gap-2">
-                                        <label for="stats-sort-by" class="font-medium my-auto">Ordenar por:</label>
-                                        <select id="stats-sort-by" class="form-select">
-                                            <option value="default">Por Defecto</option>
-                                            <option value="easiest">Más Fáciles</option>
-                                            <option value="hardest">Más Difíciles</option>
-                                            <option value="most-omitted">Más Omitidas</option>
-                                        </select>
-                                    </div>
-                                    <div class="flex gap-2">
-                                        <label for="stats-filter-by" class="font-medium my-auto">Filtrar por Área:</label>
-                                        <select id="stats-filter-by" class="form-select">
-                                            <option value="all">Todas las Áreas</option>
-                                            <!-- Opciones generadas por JS -->
-                                        </select>
-                                    </div>
-                                </div>
-                                <!-- Grid de Tarjetas de Estadísticas -->
-                                <div id="stats-results-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                    <!-- Tarjetas generadas por JS -->
-                                    <!-- Ejemplo de Tarjeta:
-                                    <div class="stat-card" data-area="Matemáticas">
-                                        <div class="stat-card-header">
-                                            <span class="stat-card-title">Matemáticas [2.]</span>
-                                            <span class="stat-card-tag bg-red-100 text-red-800">Difícil (22%)</span>
-                                        </div>
-                                        <div class="stat-card-body">
-                                            <div class="stat-distractor">
-                                                <div class="stat-distractor-label">A. (40%)</div>
-                                                <div class="stat-distractor-bar-container">
-                                                    <div class="stat-distractor-bar" style="width: 40%; background-color: #ef4444;"></div>
-                                                </div>
-                                            </div>
-                                            <div class="stat-distractor">
-                                                <div class="stat-distractor-label">B. (30%)</div>
-                                                <div class="stat-distractor-bar-container">
-                                                    <div class="stat-distractor-bar" style="width: 30%;"></div>
-                                                </div>
-                                            </div>
-                                            <div class="stat-distractor correct">
-                                                <div class="stat-distractor-label">C. (22%) (Correcta)</div>
-                                                <div class="stat-distractor-bar-container">
-                                                    <div class="stat-distractor-bar" style="width: 22%; background-color: #22c55e;"></div>
-                                                </div>
-                                            </div>
-                                            <div class="stat-distractor">
-                                                <div class="stat-distractor-label">D. (10%)</div>
-                                                <div class="stat-distractor-bar-container">
-                                                    <div class="stat-distractor-bar" style="width: 10%;"></div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="stat-card-footer">
-                                            <span>Omisión: 8%</span>
-                                        </div>
-                                    </div>
-                                    -->
-                                </div>
-                                <p id="stats-no-results" class="text-center text-gray-500 py-8 hidden">No hay preguntas que coincidan con el filtro.</p>
-                            </div>
+                        <div class="h-96 w-full">
+                            <canvas id="growthChart"></canvas>
                         </div>
-
-                        <!-- Pestaña 3: Gestión de Contenido (CRUD) -->
-                        <div id="tab-panel-crud" class="admin-tab-panel hidden">
-                            <h3 class="text-xl font-bold text-brand-header mb-4">Gestión de Contenido (CRUD)</h3>
-                            
-                            <!-- Sub-pestañas para CRUD -->
-                            <div class="border-b border-brand-border mb-4">
-                                <nav id="crud-tabs" class="-mb-px flex space-x-6" aria-label="CRUD Tabs">
-                                    <button class="crud-tab-btn active" data-target="crud-panel-student">Añadir Estudiante</button>
-                                    <button class="crud-tab-btn" data-target="crud-panel-test">Añadir Prueba</button>
-                                    <button class="crud-tab-btn" data-target="crud-panel-scores">Gestionar Puntajes</button>
-                                </nav>
-                            </div>
-
-                            <!-- Panel CRUD: Añadir Estudiante -->
-                            <div id="crud-panel-student" class="crud-tab-panel">
-                                <form id="add-student-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label for="student-name" class="form-label">Nombre Completo</label>
-                                        <input type="text" id="student-name" class="form-input w-full" required>
-                                    </div>
-                                    <div>
-                                        <label for="student-email" class="form-label">Email</label>
-                                        <input type="email" id="student-email" class="form-input w-full" required>
-                                    </div>
-                                    <div>
-                                        <label for="student-doc-type" class="form-label">Tipo Documento</label>
-                                        <select id="student-doc-type" class="form-select w-full">
-                                            <option>TI</option><option>CC</option><option>CE</option><option>PEP</option><option>PPT</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label for="student-doc-number" class="form-label">Número Documento</label>
-                                        <input type="text" id="student-doc-number" class="form-input w-full" required>
-                                    </div>
-                                    <div>
-                                        <label for="student-birthdate" class="form-label">Fecha Nacimiento (DD/MM/YYYY)</label>
-                                        <input type="text" id="student-birthdate" class="form-input w-full" placeholder="ej. 20/07/2005" required>
-                                    </div>
-                                    <div>
-                                        <label for="student-school" class="form-label">Colegio</label>
-                                        <input type="text" id="student-school" class="form-input w-full" required>
-                                    </div>
-                                    <div class="md:col-span-2 text-right flex items-center justify-end gap-4">
-                                        <span id="crud-student-status" class="text-sm font-medium"></span>
-                                        <button type="submit" id="add-student-btn" class="btn-primary">
-                                            Guardar Estudiante
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                            
-                            <!-- Panel CRUD: Añadir Prueba (placeholder) -->
-                            <div id="crud-panel-test" class="crud-tab-panel hidden">
-                                <p class="text-gray-500">Próximamente: Formulario para añadir nuevas pruebas (Simulacros o Minisimulacros) subiendo los archivos CSV y actualizando 'test_index.json' automáticamente.</p>
-                            </div>
-                            
-                            <!-- Panel CRUD: Gestionar Puntajes (placeholder) -->
-                            <div id="crud-panel-scores" class="crud-tab-panel hidden">
-                                 <p class="text-gray-500">Próximamente: Interfaz para buscar y editar un puntaje específico en 'scores_database.csv'.</p>
-                            </div>
-                        </div>
-
                     </div>
-                </div>
+                </section>
+
+                <!-- ===== SECCIÓN: INFORME INDIVIDUAL (ESTUDIANTE) ===== -->
+                <section id="report-content-section" class="dashboard-panel">
+                    <!-- Cabecera del Informe (se llena con JS) -->
+                    <div id="report-header" class="mb-8">
+                        <!-- Botón para volver (solo si admin o estudiante) -->
+                        <button id="back-to-dashboard-btn" class="btn-secondary-outline mb-4">
+                            <i data-lucide="arrow-left" class="mr-2 h-4 w-4"></i>
+                            Volver al Dashboard
+                        </button>
+                        <h1 id="report-title" class="text-3xl font-bold text-brand-header">Cargando informe...</h1>
+                        <p id="report-date" class="text-lg text-gray-600"></p>
+                    </div>
+
+                    <!-- Contenido del Informe (se llena con JS) -->
+                    <div id="report-body-content">
+                        <!-- Aquí se insertan los puntajes, radar, y pestañas de sesión -->
+                    </div>
+                </section>
+
+                <!-- ===== SECCIÓN: DASHBOARD ADMIN (GENERAL) ===== -->
+                <section id="admin-dashboard-section" class="dashboard-panel">
+                    <h1 class="text-3xl font-bold text-brand-header mb-8">Dashboard General</h1>
+
+                    <!-- (v5) Tarjetas de Métricas (KPIs) -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <div class="kpi-card bg-blue-100 text-blue-800">
+                            <div class="kpi-icon bg-blue-500">
+                                <i data-lucide="users"></i>
+                            </div>
+                            <p class="text-sm font-medium">Estudiantes Totales</p>
+                            <p id="admin-kpi-students" class="text-3xl font-bold">0</p>
+                        </div>
+                        <div class="kpi-card bg-orange-100 text-orange-800">
+                            <div class="kpi-icon bg-orange-500">
+                                <i data-lucide="file-text"></i>
+                            </div>
+                            <p class="text-sm font-medium">Pruebas Registradas</p>
+                            <p id="admin-kpi-tests" class="text-3xl font-bold">0</p>
+                        </div>
+                        <div class="kpi-card bg-green-100 text-green-800">
+                            <div class="kpi-icon bg-green-500">
+                                <i data-lucide="trending-up"></i>
+                            </div>
+                            <p class="text-sm font-medium">Prom. Simulacros</p>
+                            <p id="admin-kpi-avg-sim" class="text-3xl font-bold">0</p>
+                        </div>
+                        <div class="kpi-card bg-purple-100 text-purple-800">
+                            <div class="kpi-icon bg-purple-500">
+                                <i data-lucide="trending-up"></i>
+                            </div>
+                            <p class="text-sm font-medium">Prom. Minisimulacros</p>
+                            <p id="admin-kpi-avg-mini" class="text-3xl font-bold">0</p>
+                        </div>
+                    </div>
+
+                    <!-- Gráficos del Admin -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="bg-brand-surface p-6 rounded-2xl shadow-lg h-96">
+                            <h3 class="text-xl font-bold text-brand-header mb-4">Promedio por Materia (General)</h3>
+                            <canvas id="adminBarChart"></canvas>
+                        </div>
+                        <div class="bg-brand-surface p-6 rounded-2xl shadow-lg h-96">
+                            <h3 class="text-xl font-bold text-brand-header mb-4">Distribución de Puntajes (General)</h3>
+                            <canvas id="adminDoughnutChart"></canvas>
+                        </div>
+                    </div>
+                </section>
+                
+                <!-- ===== SECCIÓN: GESTIÓN DE ESTUDIANTES (ADMIN) ===== -->
+                <section id="admin-students-section" class="dashboard-panel">
+                    <h1 class="text-3xl font-bold text-brand-header mb-8">Gestión de Estudiantes</h1>
+                    
+                    <div class="bg-brand-surface p-6 rounded-2xl shadow-lg">
+                        <!-- Búsqueda y Paginación -->
+                        <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+                            <input type="text" id="admin-search-input" placeholder="Buscar por nombre o documento..." class="form-input w-full md:w-1/3">
+                            <div id="admin-pagination-controls" class="flex items-center gap-2">
+                                <!-- Botones de paginación se insertan aquí -->
+                            </div>
+                        </div>
+
+                        <!-- Tabla de Estudiantes -->
+                        <div class="overflow-x-auto">
+                            <table class="w-full">
+                                <thead class="border-b-2 border-brand-border">
+                                    <tr>
+                                        <th class="table-header" data-sort="Nombre Completo del Estudiante">Nombre</th>
+                                        <th class="table-header" data-sort="Número de Documento">Documento</th>
+                                        <th class="table-header" data-sort="Email">Email</th>
+                                        <th class="table-header" data-sort="Colegio/institución">Colegio</th>
+                                        <th class="table-header text-center">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-table-body">
+                                    <!-- Filas de estudiantes se insertan aquí -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ===== SECCIÓN: ANÁLISIS DE ÍTEMS (ADMIN) ===== -->
+                <section id="admin-stats-section" class="dashboard-panel">
+                    <h1 class="text-3xl font-bold text-brand-header mb-8">Análisis Estadístico de Ítems</h1>
+                    
+                    <div class="bg-brand-surface p-6 rounded-2xl shadow-lg">
+                        <!-- Selector de Prueba -->
+                        <div class="flex flex-col sm:flex-row gap-4 mb-6">
+                            <div class="flex-grow">
+                                <label for="stats-test-select" class="block text-sm font-medium text-gray-700 mb-1">
+                                    Seleccionar Prueba
+                                </label>
+                                <select id="stats-test-select" class="form-input w-full">
+                                    <option value="">Cargando pruebas...</option>
+                                </select>
+                            </div>
+                            <div class="self-end">
+                                <button id="stats-analyze-btn" class="btn-primary w-full sm:w-auto py-3">
+                                    <i data-lucide="bar-chart-2" class="mr-2 h-4 w-4"></i>
+                                    Analizar
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Contenedor de Carga (Spinner) -->
+                        <div id="stats-loading" class="text-center py-10 hidden">
+                             <svg class="animate-spin h-8 w-8 text-brand-secondary mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <p class="mt-3 text-gray-600">Procesando miles de respuestas, esto puede tardar un momento...</p>
+                        </div>
+
+                        <!-- Contenedor de Resultados (v5 - Tarjetas) -->
+                        <div id="stats-results-container" class="hidden">
+                            <h3 id="stats-results-title" class="text-2xl font-bold text-brand-header mb-6">Resultados de Análisis</h3>
+                            <div id="stats-results-cards-grid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                                <!-- Tarjetas de estadísticas se insertan aquí -->
+                                <!-- Ejemplo de Tarjeta:
+                                <div class="stats-card">
+                                    <div class="flex justify-between items-center mb-3">
+                                        <h4 class="text-lg font-bold">Matemáticas [1.]</h4>
+                                        <span class="text-sm font-bold text-green-600">Correcta: A</span>
+                                    </div>
+                                    <div class="space-y-3">
+                                        <p class_alias="text-sm font-medium">Acierto: <span class="text-xl font-bold text-green-600">85%</span> (Fácil)</p>
+                                        <p class_alias="text-sm font-medium">Omisión: <span class="text-xl font-bold text-gray-600">2%</span></p>
+                                        <hr>
+                                        <h5 class_alias="font-semibold">Distribución de Distractores:</h5>
+                                        <div class="distractor-bar correct">
+                                            <span class="label">A: 85%</span>
+                                            <div class="bar" style="width: 85%;"></div>
+                                        </div>
+                                        <div class="distractor-bar">
+                                            <span class="label">B: 5%</span>
+                                            <div class="bar" style="width: 5%;"></div>
+                                        </div>
+                                        ...
+                                    </div>
+                                </div>
+                                -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ===== SECCIÓN: CRUD DE ESTUDIANTES (ADMIN) ===== -->
+                <section id="admin-crud-section" class="dashboard-panel">
+                    <h1 class="text-3xl font-bold text-brand-header mb-8">Añadir Nuevo Estudiante</h1>
+
+                    <div class="bg-brand-surface p-6 sm:p-8 rounded-2xl shadow-lg max-w-4xl mx-auto">
+                        <form id="add-student-form" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- Campos del formulario... -->
+                            <div>
+                                <label for="student-name" class="form-label">Nombre Completo</label>
+                                <input type="text" id="student-name" required class="form-input mt-1">
+                            </div>
+                            <div>
+                                <label for="student-email" class="form-label">Email</label>
+                                <input type="email" id="student-email" required class="form-input mt-1">
+                            </div>
+                            <div>
+                                <label for="student-doc-type" class="form-label">Tipo Documento</label>
+                                <select id="student-doc-type" class="form-input mt-1">
+                                    <option>Tarjeta de Identidad (TI)</option>
+                                    <option>Cédula de Ciudadanía (CC)</option>
+                                    <option>Cédula de Extranjería (CE)</option>
+                                    <option>PEP</option>
+                                    <option>PPT</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="student-doc-number" class="form-label">Número Documento</label>
+                                <input type="text" id="student-doc-number" required class="form-input mt-1">
+                            </div>
+                            <div>
+                                <label for="student-birthdate" class="form-label">Fecha Nacimiento (DD/MM/YYYY)</label>
+                                <input type="text" id="student-birthdate" placeholder="ej. 20/07/2005" required class="form-input mt-1">
+                            </div>
+                            <div>
+                                <label for="student-school" class="form-label">Colegio</label>
+                                <input type="text" id="student-school" required class="form-input mt-1">
+                            </div>
+                             <div>
+                                <label for="student-department" class="form-label">Departamento</label>
+                                <input type="text" id="student-department" placeholder="ej. Bogotá - Cundinamarca" required class="form-input mt-1">
+                            </div>
+                            
+                            <!-- Botón de Envío -->
+                            <div class="md:col-span-2 text-right mt-4">
+                                <p id="crud-status" class="text-sm text-gray-600 mr-4 inline-block hidden"></p>
+                                <button type="submit" id="add-student-btn" class="btn-primary py-3 px-8">
+                                    Añadir Estudiante
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+
             </div>
-        </section>
-
-        <!-- ========== 5. VISTA DE INFORME INDIVIDUAL (Estudiante o Admin) ========== -->
-        <section id="report-section" class="hidden py-8 px-4 md:px-6">
-            <header class="w-full max-w-6xl mx-auto mb-8">
-                <!-- Botón de Volver (dinámico) -->
-                <button id="back-to-dashboard-btn" class="btn-secondary-outline mb-4">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
-                    Volver al Dashboard
-                </button>
-                <h1 id="report-title" class="text-3xl font-bold text-brand-header">Reporte: [Nombre de la Prueba]</h1>
-                <p id="report-student-name" class="text-lg text-brand-text">Estudiante: [Nombre Estudiante]</p>
-            </header>
-
-            <!-- Contenido del Informe -->
-            <div id="report-content-container" class="w-full max-w-6xl mx-auto">
-                
-                <!-- Resumen de Puntajes -->
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <!-- Puntaje Global (Tarjeta Principal) -->
-                    <div class="lg:col-span-2 report-card-primary">
-                        <div class="flex-grow">
-                            <h2 class="text-2xl font-bold text-brand-secondary">Puntaje Global</h2>
-                            <p class="text-lg text-gray-600">En escala de 0 a 500</p>
-                        </div>
-                        <div class="flex items-baseline">
-                            <span id="report-global-score" class="text-7xl font-extrabold text-brand-header">0</span>
-                            <span class_alias="text-xl font-semibold text-gray-500 ml-2">/ 500</span>
-                        </div>
-                        <div class="w-full bg-gray-200 rounded-full h-2.5 mt-4">
-                            <div id="report-global-bar" class="bg-brand-secondary h-2.5 rounded-full" style="width: 0%"></div>
-                        </div>
-                        <p id="report-global-avg" class="text-center mt-2 font-medium">Promedio Grupal: 0</p>
-                    </div>
-
-                    <!-- Gráfico de Radar (Mejora 2) -->
-                    <div class="bg-brand-surface p-4 rounded-xl shadow-lg">
-                        <h3 class="text-xl font-bold text-brand-header mb-2 text-center">
-                            Perfil de Desempeño
-                        </h3>
-                        <div class="w-full max-w-sm mx-auto h-64">
-                            <canvas id="radarChart"></canvas>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Puntajes por Materia -->
-                <h2 class="text-2xl font-bold text-brand-header mt-10 mb-4">Puntajes por Área</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                    <!-- Tarjetas de Materias (generadas por JS) -->
-                    <!-- Ejemplo de Tarjeta:
-                    <div class="subject-card" style="--subject-color: var(--color-matematicas)">
-                        <div class="subject-card-header">
-                            <img src="img/Matematicas (logo).svg" class="subject-card-icon" alt="Matemáticas">
-                            <span class="subject-card-title">Matemáticas</span>
-                        </div>
-                        <div class="subject-card-score">
-                            <span id="report-mat-score">0</span> / 100
-                        </div>
-                        <div class="subject-card-bar-container">
-                            <div class="subject-card-bar" style="width: 0%;"></div>
-                        </div>
-                        <div class="subject-card-footer">
-                            <span id="report-mat-level">Nivel: -</span>
-                            <span id="report-mat-avg">Avg: 0</span>
-                        </div>
-                    </div>
-                    -->
-                </div>
-
-                <!-- Navegación de Pestañas (Solo para Simulacros) -->
-                <div id="report-tabs-nav" class="border-b border-brand-border mt-10 mb-6 hidden">
-                    <nav class="-mb-px flex space-x-6" aria-label="Report Tabs">
-                        <!-- Pestañas generadas por JS -->
-                    </nav>
-                </div>
-
-                <!-- Contenedores de Pestañas (Retroalimentación) -->
-                
-                <!-- Pestaña 1: Sesión 1 / Minisimulacro -->
-                <div id="tab-panel-s1" class="report-tab-panel">
-                    <h2 id="report-s1-title" class="text-2xl font-bold text-brand-header mb-4">Retroalimentación</h2>
-                    <!-- Contenedor de Videos (S1) -->
-                    <div id="report-videos-s1" class="mb-6">
-                        <h3 class="text-xl font-semibold text-brand-header mb-3">Videos Recomendados</h3>
-                        <div class="video-grid">
-                            <!-- Tarjetas de videos generadas por JS -->
-                        </div>
-                    </div>
-                    <!-- Contenedor de Preguntas (S1) -->
-                    <div id="report-questions-s1">
-                        <h3 class="text-xl font-semibold text-brand-header mb-3">Detalle de Respuestas</h3>
-                        <div class="question-list-container">
-                            <!-- Filas de preguntas generadas por JS -->
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Pestaña 2: Sesión 2 -->
-                <div id="tab-panel-s2" class="report-tab-panel hidden">
-                    <h2 class="text-2xl font-bold text-brand-header mb-4">Retroalimentación (Sesión 2)</h2>
-                    <!-- Contenedor de Videos (S2) -->
-                    <div id="report-videos-s2" class="mb-6">
-                        <h3 class="text-xl font-semibold text-brand-header mb-3">Videos Recomendados</h3>
-                        <div class="video-grid">
-                            <!-- Tarjetas de videos generadas por JS -->
-                        </div>
-                    </div>
-                    <!-- Contenedor de Preguntas (S2) -->
-                    <div id="report-questions-s2">
-                        <h3 class="text-xl font-semibold text-brand-header mb-3">Detalle de Respuestas</h3>
-                        <div class="question-list-container">
-                            <!-- Filas de preguntas generadas por JS -->
-                        </div>
-                    </div>
-                </div>
-                
-            </div>
-        </section>
-
-    </div> <!-- Fin de .main-container -->
+        </div> <!-- Fin de #main-content -->
+    </div> <!-- Fin de #dashboard-layout -->
 
 
     <!-- ========== MODALES GLOBALES ========== -->
 
-    <!-- Modal: Gráfica de Crecimiento (Estudiante) -->
-    <div id="growth-chart-modal" class="modal-backdrop hidden">
-        <div class="modal-container max-w-4xl">
-            <div class="modal-header-container">
-                <h2 class="modal-header">Tu Progreso (Puntaje Global)</h2>
-                <button id="close-growth-chart-btn" class="modal-close-btn" title="Cerrar">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
-                </button>
-            </div>
-            <div class="p-6">
-                <!-- Filtros del Gráfico (Mejora 2) -->
-                <div id="growth-chart-filters" class="flex justify-center gap-2 mb-4 flex-wrap">
-                    <button class="chart-filter-btn active" data-filter="all">Ver Todo</button>
-                    <button class="chart-filter-btn" data-filter="simulacro">Simulacros</button>
-                    <button class="chart-filter-btn" data-filter="minisimulacro">Minisimulacros</button>
-                </div>
-                <!-- Contenedor del Gráfico -->
-                <div class="w-full h-96">
-                    <canvas id="growthChart"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal: Historial de Estudiante (Admin) -->
-    <div id="admin-modal-backdrop" class="modal-backdrop hidden">
-        <div class="modal-container max-w-5xl">
-            <div class="modal-header-container">
-                <h2 id="admin-modal-header" class="modal-header">Historial del Estudiante</h2>
-                <button id="admin-modal-close-btn" class="modal-close-btn" title="Cerrar">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
-                </button>
-            </div>
-            <div id="admin-modal-body" class="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <!-- Tarjetas de historial de admin generadas por JS -->
-                <!-- Ejemplo de tarjeta (HTML dinámico):
-                <div class="report-card admin-report-card" data-testid="sg11_07" data-doc-number="12345">
-                    ... (igual a la tarjeta de estudiante) ...
-                </div>
-                -->
-            </div>
-        </div>
-    </div>
-    
-    <!-- Modal: Token de GitHub (CRUD Admin) -->
-    <div id="github-token-modal" class="modal-backdrop hidden">
-        <div class="modal-container max-w-md">
+    <!-- (v5.3) Modal para el Token de GitHub -->
+    <div id="github-token-modal" class="modal-backdrop">
+        <div class="modal-container">
             <div class="modal-header-container">
                 <h2 class="modal-header">Confirmación de Seguridad</h2>
-                <button id="close-token-modal-btn" class="modal-close-btn" title="Cerrar">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                <!-- No hay botón de cerrar, es obligatorio -->
+            </div>
+            <div class="modal-body">
+                <p class="text-gray-700 mb-4">Para guardar los cambios en la base de datos, por favor ingresa tu Token de Acceso Personal de GitHub.</p>
+                <div>
+                    <label for="github-token-input" class="form-label">GitHub PAT (Token)</label>
+                    <input type="password" id="github-token-input" class="form-input mt-1" placeholder="ghp_...">
+                    <p id="github-token-error" class="text-sm text-brand-red mt-1 hidden">Error. El token parece ser incorrecto.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancel-token-btn" class="btn-secondary-outline">Cancelar</button>
+                <button id="confirm-token-btn" class="btn-primary">Confirmar y Guardar</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- (v5.1) Modal para el Informe del Admin -->
+    <div id="admin-modal-backdrop" class="modal-backdrop">
+        <div id="admin-modal-container" class="modal-container max-w-5xl"> <!-- Más ancho -->
+            <div id="admin-modal-header-container" class="modal-header-container">
+                <h2 id="admin-modal-header" class="modal-header">Informe del Estudiante</h2>
+                <button id="admin-modal-close-btn" class="modal-close-btn" title="Cerrar">
+                    <i data-lucide="x"></i>
                 </button>
             </div>
-            <div class="p-6">
-                <p class="text-brand-text mb-4">Para guardar los cambios en GitHub, por favor ingresa tu Token de Acceso Personal (PAT).</p>
-                <label for="github-token-input" class="form-label">GitHub PAT</label>
-                <input type="password" id="github-token-input" class="form-input w-full" placeholder="ghp_...">
-                <p id="token-modal-error" class="text-brand-red text-sm mt-2 hidden"></p>
-                <div class="flex justify-end gap-3 mt-6">
-                    <button id="cancel-token-btn" class="btn-secondary-outline">Cancelar</button>
-                    <button id="confirm-token-btn" class="btn-primary">Confirmar y Guardar</button>
-                </div>
+            <div id="admin-modal-body" class="modal-body">
+                <!-- El historial de informes del estudiante se inserta aquí -->
             </div>
         </div>
     </div>
 
+
     <!-- Scripts -->
-    
-    <!-- (CORREGIDO v5.3) Flatpickr (Selector de Fecha) ELIMINADO -->
-    <!-- <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script> -->
-    <!-- <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script> -->
-    
+    <script>
+        // Inicializar Lucide Icons
+        lucide.createIcons();
+    </script>
     <script src="script.js"></script>
 </body>
 </html>
