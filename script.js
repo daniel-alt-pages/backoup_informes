@@ -1,5 +1,6 @@
-// --- Variables Globales y Configuración (v5) ---
-const SUPER_USER_CREDENTIALS = { username: "admin", password: "20/7/2023" };
+// --- Variables Globales y Configuración (v5.4) ---
+// (NUEVO v5.4) Credenciales de admin simplificadas para evitar errores
+const SUPER_USER_CREDENTIALS = { username: "admin", password: "admin2024" };
 const BASE_DATA_URL = `https://raw.githubusercontent.com/daniel-alt-pages/backoup_informes/main/`;
 const TIMESTAMP = Date.now(); // Cache-busting
 
@@ -53,9 +54,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /**
  * Carga todos los datos esenciales de la plataforma (CSV y JSON).
- * Esta es la función principal de arranque.
- * (CORREGIDO v5.1: Se eliminó la función 'showLoading' y se
- * inlinó la lógica aquí para evitar errores de 'null' en la carga.)
+ * (CORREGIDO v5.4: Lógica de 'trim' (limpieza) movida a una función
+ * 'processStudentData' para evitar 'race conditions' con PapaParse.)
  */
 async function loadAllData() {
     const loadingMessage = document.getElementById('loading-message');
@@ -63,7 +63,6 @@ async function loadAllData() {
     const loadingScreen = document.getElementById('loading-section');
     const loginScreen = document.getElementById('login-section');
 
-    // Asegurarse de que los elementos de carga existen
     if (!loadingMessage || !loadingError || !loadingScreen || !loginScreen) {
         console.error("Error fatal: No se encontraron los elementos de la pantalla de carga en el HTML.");
         alert("Error fatal. No se pudo cargar la aplicación. Faltan elementos de carga.");
@@ -95,29 +94,8 @@ async function loadAllData() {
         loadingMessage.textContent = 'Cargando base de datos de estudiantes...';
         const studentData = await fetchAndParseCSV(URLS.studentDatabase);
         
-        // Convertir el array de estudiantes en un objeto (mapa) para búsqueda rápida O(1)
-        STUDENT_DB = {};
-        ALL_STUDENTS_ARRAY = []; // Poblar también el array para el admin
-        
-        // (CORREGIDO v5.2) Limpiar (trim) todos los campos de cada estudiante al cargar
-        studentData.forEach(originalStudent => {
-            
-            const student = {};
-            for (const key in originalStudent) {
-                // Verificar que el valor sea un string antes de hacer trim
-                if (typeof originalStudent[key] === 'string') {
-                    student[key] = originalStudent[key].trim();
-                } else {
-                    student[key] = originalStudent[key];
-                }
-            }
-            
-            const docNumber = student['Número de Documento']; // Ya está trim-eado
-            if (docNumber) {
-                STUDENT_DB[docNumber] = student;
-                ALL_STUDENTS_ARRAY.push(student);
-            }
-        });
+        // (NUEVO v5.4) Procesar y limpiar los datos de estudiantes
+        processStudentData(studentData);
 
         // 4. Éxito: Ocultar carga y mostrar login
         loadingScreen.style.display = 'none';
@@ -131,13 +109,46 @@ async function loadAllData() {
     }
 }
 
+/**
+ * (NUEVO v5.4) Procesa, limpia (trim) y almacena los datos de estudiantes.
+ * Esta función es llamada por loadAllData DESPUÉS de que PapaParse termina.
+ * @param {Array} studentData - El array de datos crudos de PapaParse.
+ */
+function processStudentData(studentData) {
+    STUDENT_DB = {};
+    ALL_STUDENTS_ARRAY = [];
+    
+    studentData.forEach(originalStudent => {
+        const student = {};
+        // Limpiar (trim) todos los campos de cada estudiante
+        for (const key in originalStudent) {
+            // (NUEVO) Limpiar también la CLAVE (header) por si tiene BOM o espacios
+            const cleanKey = key.trim(); 
+            
+            if (typeof originalStudent[key] === 'string') {
+                student[cleanKey] = originalStudent[key].trim();
+            } else {
+                student[cleanKey] = originalStudent[key];
+            }
+        }
+        
+        const docNumber = student['Número de Documento']; // Ya está trim-eado
+        if (docNumber) {
+            STUDENT_DB[docNumber] = student;
+            ALL_STUDENTS_ARRAY.push(student);
+        }
+    });
+    
+    // Debugging: Verificar si la base de datos cargó
+    console.log(`Base de datos de estudiantes cargada y procesada. ${ALL_STUDENTS_ARRAY.length} registros.`);
+    // console.log("Primer estudiante en DB (limpio):", STUDENT_DB[ALL_STUDENTS_ARRAY[0]['Número de Documento']]);
+}
+
 
 // --- 2. MANEJO DE EVENTOS (LISTENERS) ---
 
 /**
  * Configura todos los listeners de eventos principales de la aplicación.
- * (CORREGIDO v5.1: Se usa '?' (encadenamiento opcional) en todos los 
- * listeners para evitar errores si el elemento no existe en la vista actual)
  */
 function setupEventListeners() {
     // Elementos de la UI
@@ -255,41 +266,56 @@ function setupEventListeners() {
 
 /**
  * Maneja el envío del formulario de login.
- * Valida credenciales de admin o estudiante.
+ * (CORREGIDO v5.4: Añadidos 'console.log' para depuración)
  */
 function handleLogin(e) {
     e.preventDefault();
     const docType = document.getElementById('doc-type').value;
     const docNumber = document.getElementById('doc-number').value.trim();
-    // (CORREGIDO v5) La contraseña es la fecha de nacimiento (password)
-    const password = document.getElementById('password').value.trim(); // DD/MM/YYYY
+    const password = document.getElementById('password').value.trim();
     const loginError = document.getElementById('login-error');
 
-    // Flujo de Admin
+    // --- Depuración (Paso 1: ¿Qué se está recibiendo?) ---
+    console.log("--- Intento de Login ---");
+    console.log(`Input DocType: [${docType}]`);
+    console.log(`Input DocNumber (admin?): [${docNumber}]`);
+    console.log(`Input Password (fecha?): [${password}]`);
+
+    // --- Flujo de Admin (Paso 2: Comparación de Admin) ---
+    console.log(`Comparando con Admin USER: [${SUPER_USER_CREDENTIALS.username}]`);
+    console.log(`Comparando con Admin PASS: [${SUPER_USER_CREDENTIALS.password}]`);
+
     if (docNumber === SUPER_USER_CREDENTIALS.username && password === SUPER_USER_CREDENTIALS.password) {
+        console.log("¡ÉXITO de Admin!");
         loginError.style.display = 'none';
         showAdminDashboard(true); // Cargar datos y mostrar
         return;
     }
 
-    // Flujo de Estudiante
+    // --- Flujo de Estudiante (Paso 3: Comparación de Estudiante) ---
     const studentData = STUDENT_DB[docNumber];
 
-    // (CORREGIDO v5) Validar Tipo de Documento Y Fecha de Nacimiento
-    if (studentData && 
-        studentData['Tipo de Documento'] === docType && 
-        studentData['Fecha de Nacimiento'] === password) {
-        
-        loginError.style.display = 'none';
-        CURRENT_STUDENT_DATA = studentData;
-        // Filtrar los puntajes solo para este estudiante
-        CURRENT_STUDENT_REPORTS = SCORES_DB.filter(score => score.doc_number === docNumber);
-        
-        showStudentDashboard(true); // Mostrar dashboard
-        return;
+    if (studentData) {
+        console.log("Estudiante encontrado en DB:", studentData);
+        console.log(`Comparando DocType: [${studentData['Tipo de Documento']}] === [${docType}]`);
+        console.log(`Comparando Password/Fecha: [${studentData['Fecha de Nacimiento']}] === [${password}]`);
+
+        if (studentData['Tipo de Documento'] === docType && 
+            studentData['Fecha de Nacimiento'] === password) {
+            
+            console.log("¡ÉXITO de Estudiante!");
+            loginError.style.display = 'none';
+            CURRENT_STUDENT_DATA = studentData;
+            CURRENT_STUDENT_REPORTS = SCORES_DB.filter(score => score.doc_number === docNumber);
+            showStudentDashboard(true); // Mostrar dashboard
+            return;
+        }
+    } else {
+        console.log(`Estudiante con DocNumber [${docNumber}] NO encontrado en STUDENT_DB.`);
     }
 
-    // Error
+    // --- Error (Paso 4: Falla) ---
+    console.log("--- FALLO DE LOGIN ---");
     loginError.style.display = 'block';
 }
 
