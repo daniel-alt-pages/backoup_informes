@@ -1,5 +1,6 @@
-// --- Variables Globales y Configuración (v5.4) ---
-// (NUEVO v5.4) Credenciales de admin simplificadas para evitar errores
+// --- Variables Globales y Configuración (v6) ---
+
+// (v5.4) Credenciales de admin simplificadas
 const SUPER_USER_CREDENTIALS = { username: "admin", password: "admin2024" };
 const BASE_DATA_URL = `https://raw.githubusercontent.com/daniel-alt-pages/backoup_informes/main/`;
 const TIMESTAMP = Date.now(); // Cache-busting
@@ -25,6 +26,9 @@ let currentAdminPage = 1;
 const ADMIN_ROWS_PER_PAGE = 10;
 let currentAdminSort = { column: 'Nombre Completo del Estudiante', direction: 'asc' };
 let isAdminViewingReport = false; // Flag para el botón "Volver"
+let currentActivePanel = ''; // (v6) Panel activo
+let globalStudentName = ''; // (v6) Nombre del usuario logueado
+let globalStudentRole = ''; // (v6) Rol del usuario logueado
 
 // Configuración del CRUD (API de GitHub)
 const GITHUB_API_CONFIG = {
@@ -33,29 +37,33 @@ const GITHUB_API_CONFIG = {
     branch: "main",
     studentDbPath: "database/student_database.csv"
 };
-// (NUEVO v5) Caché de cambios del CRUD
+// (v5) Caché de cambios del CRUD
 let crudCache = {
-    studentDb: null // Almacenará el contenido de student_database.csv
+    studentDb: null
 };
 
 
 // --- 1. INICIALIZACIÓN DE LA APLICACIÓN ---
 
 document.addEventListener('DOMContentLoaded', () => {
-    // (CORREGIDO v5.3) Flatpickr (Selector de Fecha) ELIMINADO
-    // flatpickr("#password", { ... });
-    
     // Asignar listeners de eventos
     setupEventListeners();
 
     // Iniciar la carga de datos
     loadAllData();
+    
+    // Inicializar Lucide Icons (por si se añaden dinámicamente)
+    // (Asegúrate de llamarlo también después de insertar HTML con iconos)
+    try {
+        lucide.createIcons();
+    } catch (e) {
+        console.warn("Lucide icons no se pudieron inicializar (puede ser normal en la carga inicial).");
+    }
 });
 
 /**
  * Carga todos los datos esenciales de la plataforma (CSV y JSON).
- * (CORREGIDO v5.4: Lógica de 'trim' (limpieza) movida a una función
- * 'processStudentData' para evitar 'race conditions' con PapaParse.)
+ * (v5.4) Lógica de 'trim' (limpieza) movida a 'processStudentData'
  */
 async function loadAllData() {
     const loadingMessage = document.getElementById('loading-message');
@@ -94,7 +102,7 @@ async function loadAllData() {
         loadingMessage.textContent = 'Cargando base de datos de estudiantes...';
         const studentData = await fetchAndParseCSV(URLS.studentDatabase);
         
-        // (NUEVO v5.4) Procesar y limpiar los datos de estudiantes
+        // (v5.4) Procesar y limpiar los datos de estudiantes
         processStudentData(studentData);
 
         // 4. Éxito: Ocultar carga y mostrar login
@@ -110,9 +118,7 @@ async function loadAllData() {
 }
 
 /**
- * (NUEVO v5.4) Procesa, limpia (trim) y almacena los datos de estudiantes.
- * Esta función es llamada por loadAllData DESPUÉS de que PapaParse termina.
- * @param {Array} studentData - El array de datos crudos de PapaParse.
+ * (v5.4) Procesa, limpia (trim) y almacena los datos de estudiantes.
  */
 function processStudentData(studentData) {
     STUDENT_DB = {};
@@ -120,11 +126,8 @@ function processStudentData(studentData) {
     
     studentData.forEach(originalStudent => {
         const student = {};
-        // Limpiar (trim) todos los campos de cada estudiante
         for (const key in originalStudent) {
-            // (NUEVO) Limpiar también la CLAVE (header) por si tiene BOM o espacios
             const cleanKey = key.trim(); 
-            
             if (typeof originalStudent[key] === 'string') {
                 student[cleanKey] = originalStudent[key].trim();
             } else {
@@ -132,16 +135,14 @@ function processStudentData(studentData) {
             }
         }
         
-        const docNumber = student['Número de Documento']; // Ya está trim-eado
+        const docNumber = student['Número de Documento'];
         if (docNumber) {
             STUDENT_DB[docNumber] = student;
             ALL_STUDENTS_ARRAY.push(student);
         }
     });
     
-    // Debugging: Verificar si la base de datos cargó
     console.log(`Base de datos de estudiantes cargada y procesada. ${ALL_STUDENTS_ARRAY.length} registros.`);
-    // console.log("Primer estudiante en DB (limpio):", STUDENT_DB[ALL_STUDENTS_ARRAY[0]['Número de Documento']]);
 }
 
 
@@ -149,124 +150,207 @@ function processStudentData(studentData) {
 
 /**
  * Configura todos los listeners de eventos principales de la aplicación.
+ * (v6) Adaptado para el nuevo layout de Sidebar
  */
 function setupEventListeners() {
-    // Elementos de la UI
+    // --- Selectores (Cache) ---
     const elements = {
+        // Layout
         loginForm: document.getElementById('login-form'),
-        togglePasswordBtn: document.getElementById('toggle-password'),
-        studentLogoutBtn: document.getElementById('student-logout-btn'),
-        adminLogoutBtn: document.getElementById('admin-logout-btn'),
-        viewGrowthChartBtn: document.getElementById('view-growth-chart-btn'),
-        closeGrowthChartBtn: document.getElementById('close-growth-chart-btn'),
-        growthChartFilters: document.getElementById('growth-chart-filters'),
-        reportsGrid: document.getElementById('reports-grid'),
+        logoutButton: document.getElementById('logout-button'),
+        sidebar: document.getElementById('sidebar'),
+        mobileSidebarToggle: document.getElementById('mobile-sidebar-toggle'),
         backToDashboardBtn: document.getElementById('back-to-dashboard-btn'),
+
+        // Navegación Sidebar (v6)
+        navStudentDashboard: document.getElementById('nav-student-dashboard'),
+        navAdminDashboard: document.getElementById('nav-admin-dashboard'),
+        navAdminStudents: document.getElementById('nav-admin-students'),
+        navAdminStats: document.getElementById('nav-admin-stats'),
+        navAdminCrud: document.getElementById('nav-admin-crud'),
+        
+        // Login
+        togglePassword: document.getElementById('toggle-password'),
+        
+        // Dashboard Estudiante
+        studentReportsGrid: document.getElementById('student-reports-grid'),
+        growthChartFilters: document.getElementById('growth-chart-filters'),
+        
+        // Dashboard Admin (General)
         adminSearchInput: document.getElementById('admin-search-input'),
-        adminTableHead: document.querySelector('#admin-dashboard thead'),
         adminTableBody: document.getElementById('admin-table-body'),
-        adminPagination: document.getElementById('admin-pagination'),
+        adminPaginationControls: document.getElementById('admin-pagination-controls'),
+        
+        // Admin (Análisis Estadístico)
+        statsAnalyzeBtn: document.getElementById('stats-analyze-btn'),
+        statsTestSelect: document.getElementById('stats-test-select'),
+        
+        // Admin (CRUD)
+        addStudentForm: document.getElementById('add-student-form'),
+        
+        // Modales
         adminModalBackdrop: document.getElementById('admin-modal-backdrop'),
         adminModalCloseBtn: document.getElementById('admin-modal-close-btn'),
         adminModalBody: document.getElementById('admin-modal-body'),
-        adminTabs: document.getElementById('admin-tabs'),
-        crudTabs: document.getElementById('crud-tabs'),
-        statsAnalyzeBtn: document.getElementById('stats-analyze-btn'),
-        statsSortBy: document.getElementById('stats-sort-by'),
-        statsFilterBy: document.getElementById('stats-filter-by'),
-        addStudentForm: document.getElementById('add-student-form'),
         githubTokenModal: document.getElementById('github-token-modal'),
-        closeTokenModalBtn: document.getElementById('close-token-modal-btn'),
         cancelTokenBtn: document.getElementById('cancel-token-btn'),
         confirmTokenBtn: document.getElementById('confirm-token-btn'),
     };
 
+    // --- Asignación de Listeners (con Encadenamiento Opcional '?.') ---
+
     // Formulario de Login
     elements.loginForm?.addEventListener('submit', handleLogin);
 
-    // Botón de ver/ocultar contraseña
-    elements.togglePasswordBtn?.addEventListener('click', togglePasswordVisibility);
-
-    // Botones de Logout
-    elements.studentLogoutBtn?.addEventListener('click', handleLogout);
-    elements.adminLogoutBtn?.addEventListener('click', handleLogout);
-
-    // Botón "Volver al Dashboard" (en informe)
+    // Ver/Ocultar Contraseña
+    elements.togglePassword?.addEventListener('click', togglePasswordVisibility);
+    
+    // --- Navegación Principal (v6) ---
+    elements.logoutButton?.addEventListener('click', logout);
     elements.backToDashboardBtn?.addEventListener('click', () => {
-        // Devuelve al dashboard correcto (estudiante o admin)
-        if (isAdminViewingReport) {
-            showAdminDashboard(false); // No recargar datos, solo mostrar
+        if (globalStudentRole === 'admin') {
+            showAdminDashboard();
         } else {
-            showStudentDashboard(false); // No recargar datos, solo mostrar
+            showStudentDashboard();
         }
     });
 
-    // --- Eventos del Estudiante ---
-    elements.viewGrowthChartBtn?.addEventListener('click', () => {
-        renderGrowthChart(CURRENT_STUDENT_REPORTS, 'all'); // Renderizar gráfico
-        openModal(document.getElementById('growth-chart-modal'));
-    });
-    elements.closeGrowthChartBtn?.addEventListener('click', () => {
-        closeModal(document.getElementById('growth-chart-modal'));
-    });
-    elements.growthChartFilters?.addEventListener('click', handleGrowthChartFilter);
-    elements.reportsGrid?.addEventListener('click', handleReportCardClick);
+    // Toggle de Sidebar Móvil (v6)
+    elements.mobileSidebarToggle?.addEventListener('click', toggleMobileSidebar);
 
-    // --- Eventos del Administrador ---
-    elements.adminSearchInput?.addEventListener('input', (e) => {
-        currentAdminPage = 1; // Resetear a página 1 al buscar
-        renderAdminTable(e.target.value);
+    // Clic en el overlay para cerrar sidebar móvil
+    document.body.addEventListener('click', (e) => {
+        if (e.target.id === 'sidebar-overlay') {
+            toggleMobileSidebar(false); // Forzar cierre
+        }
     });
-    elements.adminTableHead?.addEventListener('click', handleAdminTableSort);
-    elements.adminPagination?.addEventListener('click', handleAdminPagination);
-    elements.adminModalCloseBtn?.addEventListener('click', () => {
-        closeModal(elements.adminModalBackdrop);
-    });
-    elements.adminTabs?.addEventListener('click', handleAdminTabSwitch);
-    elements.crudTabs?.addEventListener('click', handleCrudTabSwitch);
 
-    // Click en "Ver" (historial) en la tabla de Admin
+    // Navegación del Sidebar (v6)
+    elements.navStudentDashboard?.addEventListener('click', (e) => { e.preventDefault(); showStudentDashboard(); });
+    elements.navAdminDashboard?.addEventListener('click', (e) => { e.preventDefault(); showAdminDashboard(); });
+    elements.navAdminStudents?.addEventListener('click', (e) => { e.preventDefault(); showAdminStudentsPanel(); });
+    elements.navAdminStats?.addEventListener('click', (e) => { e.preventDefault(); showAdminStatsPanel(); });
+    elements.navAdminCrud?.addEventListener('click', (e) => { e.preventDefault(); showAdminCrudPanel(); });
+
+    // --- Dashboard Estudiante ---
+    
+    // Clic en "Ver Informe" (Tarjeta de informe)
+    elements.studentReportsGrid?.addEventListener('click', (e) => {
+        const card = e.target.closest('.report-card[data-testid]');
+        if (card) {
+            const testId = card.dataset.testid;
+            showIndividualReport(testId);
+        }
+    });
+
+    // (v5.1) Filtros del Gráfico de Crecimiento
+    elements.growthChartFilters?.addEventListener('click', (e) => {
+        if (e.target.classList.contains('chart-filter-btn')) {
+            elements.growthChartFilters.querySelectorAll('.chart-filter-btn').forEach(btn => btn.classList.remove('active'));
+            e.target.classList.add('active');
+            const filterType = e.target.dataset.filter;
+            renderGrowthChart(CURRENT_STUDENT_REPORTS, filterType);
+        }
+    });
+
+    // --- Dashboard Admin ---
+
+    // Búsqueda en tabla de estudiantes
+    elements.adminSearchInput?.addEventListener('input', () => {
+        currentAdminPage = 1;
+        renderAdminTable();
+    });
+
+    // Paginación de tabla de estudiantes
+    elements.adminPaginationControls?.addEventListener('click', (e) => {
+        const btn = e.target.closest('.pagination-btn');
+        if (btn && !btn.disabled) {
+            const newPage = parseInt(btn.dataset.page, 10);
+            if (newPage) {
+                currentAdminPage = newPage;
+                renderAdminTable();
+            }
+        }
+    });
+
+    // Ordenar tabla de estudiantes
+    document.querySelector('#admin-students-section table thead')?.addEventListener('click', (e) => {
+        const header = e.target.closest('.table-header');
+        if (header && header.dataset.sort) {
+            const sortKey = header.dataset.sort;
+            if (currentAdminSort.column === sortKey) {
+                currentAdminSort.direction = currentAdminSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentAdminSort.column = sortKey;
+                currentAdminSort.direction = 'asc';
+            }
+            currentAdminPage = 1;
+            renderAdminTable();
+        }
+    });
+    
+    // Clic en "Ver" (fila de estudiante)
     elements.adminTableBody?.addEventListener('click', (e) => {
-        const viewButton = e.target.closest('.view-report-btn');
+        const viewButton = e.target.closest('.view-student-history-btn');
         if (viewButton) {
             const studentId = viewButton.dataset.studentId;
             showAdminStudentHistory(studentId);
         }
     });
 
-    // Click en una tarjeta de informe DENTRO del modal de admin
-    elements.adminModalBody?.addEventListener('click', handleAdminModalCardClick);
+    // Clic en un informe DENTRO del modal de admin
+    elements.adminModalBody?.addEventListener('click', async (e) => {
+       const card = e.target.closest('.report-card[data-testid]');
+       if (card) {
+           const testId = card.dataset.testid;
+           const docNumber = card.dataset.docNumber;
 
-    // Análisis Estadístico (Admin)
-    elements.statsAnalyzeBtn?.addEventListener('click', handleStatsAnalysis);
-    
-    // (CORREGIDO) Añadir '?' para evitar errores si los elementos no existen
-    elements.statsSortBy?.addEventListener('change', (e) => {
-        // Re-renderizar las tarjetas con el nuevo orden
-        if (CACHED_TEST_DATA.currentStats) {
-             renderStatsCards(CACHED_TEST_DATA.currentStats, e.target.value);
+           // Simular estado de "estudiante"
+           const tempStudentData = STUDENT_DB[docNumber];
+           const tempStudentReports = SCORES_DB.filter(score => score.doc_number === docNumber);
+           
+           // (v5.1) Guardar estado del admin
+           isAdminViewingReport = true; 
+           
+           // Ocultar modal y mostrar informe
+           closeModal(elements.adminModalBackdrop);
+           await showIndividualReport(testId, tempStudentData, tempStudentReports);
+           
+           // (v5.1) Restaurar estado de admin
+           isAdminViewingReport = false;
+       }
+    });
+
+    // Cerrar modal de admin
+    elements.adminModalCloseBtn?.addEventListener('click', () => closeModal(elements.adminModalBackdrop));
+    elements.adminModalBackdrop?.addEventListener('click', (e) => {
+        if (e.target === elements.adminModalBackdrop) {
+            closeModal(elements.adminModalBackdrop);
         }
     });
-    elements.statsFilterBy?.addEventListener('change', (e) => {
-        // Filtrar las tarjetas visibles
-        filterStatsCards(e.target.value);
-    });
-    
-    // CRUD (Admin)
+
+    // --- Análisis Estadístico ---
+    elements.statsAnalyzeBtn?.addEventListener('click', handleAnalyzeTest);
+
+    // --- CRUD ---
     elements.addStudentForm?.addEventListener('submit', handleAddStudentSubmit);
     
-    // Listeners del Modal de Token
-    elements.closeTokenModalBtn?.addEventListener('click', () => closeModal(elements.githubTokenModal));
-    elements.cancelTokenBtn?.addEventListener('click', () => closeModal(elements.githubTokenModal));
+    // Modales del CRUD
+    elements.cancelTokenBtn?.addEventListener('click', () => {
+        closeModal(elements.githubTokenModal);
+        document.getElementById('github-token-input').value = '';
+        document.getElementById('github-token-error').style.display = 'none';
+    });
+    
     elements.confirmTokenBtn?.addEventListener('click', handleConfirmGithubToken);
 }
 
 
-// --- 3. LÓGICA DE AUTENTICACIÓN Y NAVEGACIÓN ---
+// --- 3. LÓGICA DE AUTENTICACIÓN Y NAVEGACIÓN (v6) ---
 
 /**
  * Maneja el envío del formulario de login.
- * (CORREGIDO v5.4: Añadidos 'console.log' para depuración)
+ * (v5.4) Incluye depuración
  */
 function handleLogin(e) {
     e.preventDefault();
@@ -280,15 +364,18 @@ function handleLogin(e) {
     console.log(`Input DocType: [${docType}]`);
     console.log(`Input DocNumber (admin?): [${docNumber}]`);
     console.log(`Input Password (fecha?): [${password}]`);
-
-    // --- Flujo de Admin (Paso 2: Comparación de Admin) ---
-    console.log(`Comparando con Admin USER: [${SUPER_USER_CREDENTIALS.username}]`);
     console.log(`Comparando con Admin PASS: [${SUPER_USER_CREDENTIALS.password}]`);
 
+    // --- Flujo de Admin (Paso 2: Comparación de Admin) ---
     if (docNumber === SUPER_USER_CREDENTIALS.username && password === SUPER_USER_CREDENTIALS.password) {
         console.log("¡ÉXITO de Admin!");
         loginError.style.display = 'none';
-        showAdminDashboard(true); // Cargar datos y mostrar
+        
+        globalStudentName = "Administrador";
+        globalStudentRole = "admin";
+        
+        showMainLayout(); // (v6) Mostrar layout
+        showAdminDashboard(); // (v6) Mostrar panel
         return;
     }
 
@@ -297,7 +384,6 @@ function handleLogin(e) {
 
     if (studentData) {
         console.log("Estudiante encontrado en DB:", studentData);
-        console.log(`Comparando DocType: [${studentData['Tipo de Documento']}] === [${docType}]`);
         console.log(`Comparando Password/Fecha: [${studentData['Fecha de Nacimiento']}] === [${password}]`);
 
         if (studentData['Tipo de Documento'] === docType && 
@@ -305,9 +391,15 @@ function handleLogin(e) {
             
             console.log("¡ÉXITO de Estudiante!");
             loginError.style.display = 'none';
+            
+            // Guardar datos globales del estudiante
             CURRENT_STUDENT_DATA = studentData;
             CURRENT_STUDENT_REPORTS = SCORES_DB.filter(score => score.doc_number === docNumber);
-            showStudentDashboard(true); // Mostrar dashboard
+            globalStudentName = studentData['Nombre Completo del Estudiante'];
+            globalStudentRole = "student";
+
+            showMainLayout(); // (v6) Mostrar layout
+            showStudentDashboard(); // (v6) Mostrar panel
             return;
         }
     } else {
@@ -320,29 +412,87 @@ function handleLogin(e) {
 }
 
 /**
- * Cierra sesión y resetea la aplicación al estado de login.
+ * (v6) Muestra el layout principal (sidebar + content) y oculta el login.
+ * Actualiza el perfil en el sidebar.
  */
-function handleLogout() {
-    // Limpiar datos de sesión
-    CURRENT_STUDENT_DATA = null;
-    CURRENT_STUDENT_REPORTS = [];
-    CACHED_TEST_DATA = {};
-    isAdminViewingReport = false;
+function showMainLayout() {
+    document.getElementById('login-section').style.display = 'none';
+    document.getElementById('dashboard-layout').style.display = 'block';
     
-    // Limpiar campos de login
-    document.getElementById('doc-number').value = '';
-    document.getElementById('password').value = '';
-    document.getElementById('login-error').style.display = 'none';
-
-    // Ocultar todas las secciones y mostrar solo el login
-    document.getElementById('student-dashboard').style.display = 'none';
-    document.getElementById('admin-dashboard').style.display = 'none';
-    document.getElementById('report-section').style.display = 'none';
-    document.getElementById('login-section').style.display = 'block';
+    // Actualizar perfil del Sidebar
+    document.getElementById('sidebar-username').textContent = globalStudentName;
+    document.getElementById('sidebar-userrole').textContent = globalStudentRole === 'admin' ? 'Administrador' : 'Estudiante';
+    
+    // Configurar visibilidad de navegación del sidebar
+    const isAdmin = globalStudentRole === 'admin';
+    document.getElementById('nav-student-dashboard').style.display = isAdmin ? 'none' : 'flex';
+    document.getElementById('nav-admin-dashboard').style.display = isAdmin ? 'flex' : 'none';
+    document.getElementById('nav-admin-students').style.display = isAdmin ? 'flex' : 'none';
+    document.getElementById('nav-admin-stats').style.display = isAdmin ? 'flex' : 'none';
+    document.getElementById('nav-admin-crud').style.display = isAdmin ? 'flex' : 'none';
 }
 
 /**
- * Muestra/Oculta la contraseña en el campo de login.
+ * (v6) Muestra un panel de contenido específico y actualiza el sidebar.
+ * @param {string} panelId El ID de la sección a mostrar (ej. 'student-dashboard-section')
+ * @param {string} navId El ID del enlace de navegación a activar (ej. 'nav-student-dashboard')
+ */
+function showPanel(panelId, navId) {
+    // Ocultar todos los paneles
+    document.querySelectorAll('.dashboard-panel').forEach(section => {
+        section.style.display = 'none';
+    });
+    
+    // Mostrar el panel solicitado
+    const panel = document.getElementById(panelId);
+    if (panel) {
+        panel.style.display = 'block';
+    }
+    
+    // Actualizar estado activo en sidebar
+    document.querySelectorAll('.sidebar-link').forEach(link => {
+        link.classList.remove('active');
+    });
+    const navLink = document.getElementById(navId);
+    if (navLink) {
+        navLink.classList.add('active');
+    }
+    
+    currentActivePanel = panelId;
+    
+    // Cerrar sidebar móvil después de la navegación
+    toggleMobileSidebar(false);
+}
+
+/**
+ * Cierra sesión y resetea la aplicación al estado de login.
+ */
+function logout(e) {
+    if(e) e.preventDefault();
+    
+    // Limpiar datos
+    CURRENT_STUDENT_DATA = null;
+    CURRENT_STUDENT_REPORTS = [];
+    globalStudentName = '';
+    globalStudentRole = '';
+    isAdminViewingReport = false;
+    
+    // (v6) Ocultar layout del dashboard y mostrar login
+    document.getElementById('dashboard-layout').style.display = 'none';
+    document.getElementById('login-section').style.display = 'block';
+    
+    // Ocultar todos los paneles para un reinicio limpio
+    document.querySelectorAll('.dashboard-panel').forEach(section => {
+        section.style.display = 'none';
+    });
+
+    // Limpiar campos de login
+    document.getElementById('login-form').reset();
+    document.getElementById('login-error').style.display = 'none';
+}
+
+/**
+ * (v5.3) Muestra/Oculta la contraseña en el formulario de login.
  */
 function togglePasswordVisibility() {
     const passwordInput = document.getElementById('password');
@@ -361,185 +511,136 @@ function togglePasswordVisibility() {
 }
 
 /**
- * Cambia la visibilidad de las secciones principales.
- * @param {string} sectionToShow - ID de la sección a mostrar ('login-section', 'student-dashboard', etc.)
+ * (v6) Controla la visibilidad del sidebar en móvil.
+ * @param {boolean} [forceOpen] - Opcional. Forzar apertura (true) o cierre (false).
  */
-function showSection(sectionToShow) {
-    const sections = ['login-section', 'loading-section', 'student-dashboard', 'admin-dashboard', 'report-section'];
-    sections.forEach(sectionId => {
-        const el = document.getElementById(sectionId);
-        if (el) {
-            el.style.display = (sectionId === sectionToShow) ? 'block' : 'none';
-        }
-    });
-}
+function toggleMobileSidebar(forceOpen = null) {
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
 
-/**
- * Abre un modal (backdrop + container).
- * @param {HTMLElement} modalBackdrop - El elemento de fondo del modal.
- */
-function openModal(modalBackdrop) {
-    if (!modalBackdrop) return;
-    // (NUEVO v5) Corrección de bug: Forzar al body a no moverse
-    document.body.style.overflow = 'hidden';
-    modalBackdrop.classList.remove('hidden');
-}
-
-/**
- * Cierra un modal.
- * @param {HTMLElement} modalBackdrop - El elemento de fondo del modal.
- */
-function closeModal(modalBackdrop) {
-    if (!modalBackdrop) return;
-    document.body.style.overflow = ''; // Devolver scroll al body
-    modalBackdrop.classList.add('hidden');
-}
-
-
-// --- 4. DASHBOARD DEL ESTUDIANTE ---
-
-/**
- * Muestra el dashboard del estudiante y pobla sus informes.
- * @param {boolean} shouldShow - Si es true, muestra la sección.
- */
-function showStudentDashboard(shouldShow = true) {
-    if (shouldShow) {
-        showSection('student-dashboard');
+    let isOpen;
+    if (forceOpen !== null) {
+        isOpen = !forceOpen; // Si queremos forzar apertura, fingimos que está cerrado
+    } else {
+        isOpen = sidebar.classList.contains('is-open');
     }
 
-    // Poblar nombre
-    const studentName = CURRENT_STUDENT_DATA['Nombre Completo del Estudiante'];
-    document.getElementById('student-name-header').textContent = `Hola, ${studentName.split(' ')[0]}`;
+    if (isOpen) {
+        // Cerrar
+        sidebar.classList.remove('is-open');
+        const overlay = document.getElementById('sidebar-overlay');
+        if (overlay) {
+            overlay.remove();
+        }
+    } else {
+        // Abrir
+        sidebar.classList.add('is-open');
+        const overlay = document.createElement('div');
+        overlay.id = 'sidebar-overlay';
+        overlay.className = 'sidebar-overlay lg:hidden'; // 'lg:hidden' asegura que no se muestre en desktop
+        document.body.appendChild(overlay);
+    }
+}
 
-    // Poblar tarjetas de informes
-    const reportsGrid = document.getElementById('reports-grid');
-    reportsGrid.innerHTML = ''; // Limpiar
 
-    if (CURRENT_STUDENT_REPORTS.length === 0) {
-        reportsGrid.innerHTML = '<p class="text-gray-500 col-span-full">No tienes informes disponibles todavía.</p>';
+// --- 4. LÓGICA DEL DASHBOARD DE ESTUDIANTE ---
+
+/**
+ * Muestra el dashboard del estudiante.
+ */
+function showStudentDashboard() {
+    showPanel('student-dashboard-section', 'nav-student-dashboard');
+
+    const grid = document.getElementById('student-reports-grid');
+    grid.innerHTML = ''; // Limpiar
+    
+    if (!CURRENT_STUDENT_REPORTS || CURRENT_STUDENT_REPORTS.length === 0) {
+        grid.innerHTML = '<p class="text-gray-600 col-span-full">No tienes informes disponibles todavía.</p>';
         return;
     }
-    
-    // Ordenar informes por fecha (más reciente primero)
-    const sortedReports = [...CURRENT_STUDENT_REPORTS].sort((a, b) => {
-        // Manejar fechas inválidas o nulas
-        const dateA = new Date(a.test_date);
-        const dateB = new Date(b.test_date);
-        if (isNaN(dateA)) return 1;
-        if (isNaN(dateB)) return -1;
-        return dateB - dateA;
-    });
+
+    // Ordenar por fecha (más reciente primero)
+    const sortedReports = [...CURRENT_STUDENT_REPORTS].sort((a, b) => new Date(b.test_date) - new Date(a.test_date));
 
     sortedReports.forEach(report => {
         const testInfo = TEST_INDEX[report.test_id];
-        if (!testInfo) return; // Si la prueba no existe en el índice, omitirla
+        if (!testInfo) return; // Omitir si la prueba no está en el índice
 
-        const isSimulacro = testInfo.type === 'simulacro';
-        const badgeColor = isSimulacro ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800';
-        const badgeText = isSimulacro ? 'Simulacro' : 'Minisimulacro';
-        
         const cardHTML = `
             <div class="report-card" data-testid="${report.test_id}">
-                <div class="report-card-header">
-                    <div>
-                        <h3 class="report-card-title">${testInfo.name}</h3>
-                        <p class="report-card-date text-sm text-gray-500">Realizado: ${new Date(report.test_date).toLocaleDateString('es-CO')}</p>
-                    </div>
-                    <span class="report-card-badge ${badgeColor}">${badgeText}</span>
+                <h3 class="text-xl font-bold text-brand-header mb-2">${testInfo.name}</h3>
+                <p class="text-sm text-gray-500 mb-4">Realizado el: ${new Date(report.test_date).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                <div class="mb-5">
+                    <p class="text-sm font-medium text-gray-600">Puntaje Global</p>
+                    <p class="text-5xl font-extrabold text-brand-secondary">${report.global_score}<span class="text-3xl font-medium text-gray-400">/500</span></p>
                 </div>
-                <div class="report-card-body">
-                    <div class="report-card-score">
-                        <span class="text-lg font-medium text-brand-text">Puntaje Global</span>
-                        <span class="global-score">${report.global_score}</span>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
-                        <div class="bg-brand-secondary h-2 rounded-full" style="width: ${report.global_score / 5}%"></div>
-                    </div>
-                </div>
+                <button class="btn-primary w-full py-3">
+                    Ver Informe Detallado
+                    <i data-lucide="arrow-right" class="ml-2 h-4 w-4"></i>
+                </button>
             </div>
         `;
-        reportsGrid.innerHTML += cardHTML;
+        grid.innerHTML += cardHTML;
     });
+
+    // Renderizar gráfico de crecimiento
+    renderGrowthChart(sortedReports, 'all');
+    
+    // Resetear filtros del gráfico
+    document.querySelectorAll('#growth-chart-filters .chart-filter-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.filter === 'all') {
+            btn.classList.add('active');
+        }
+    });
+
+    lucide.createIcons(); // Actualizar iconos
 }
 
 /**
- * Maneja el clic en una tarjeta de informe del estudiante.
- * @param {Event} e - El evento de clic.
- */
-function handleReportCardClick(e) {
-    const card = e.target.closest('.report-card');
-    if (card && card.dataset.testid) {
-        const testId = card.dataset.testid;
-        showIndividualReport(testId);
-    }
-}
-
-/**
- * Maneja el filtro del gráfico de progreso del estudiante.
- * @param {Event} e - El evento de clic.
- */
-function handleGrowthChartFilter(e) {
-    if (e.target.classList.contains('chart-filter-btn')) {
-        // Actualizar estilo de botones
-        document.querySelectorAll('#growth-chart-filters .chart-filter-btn').forEach(btn => {
-            btn.classList.remove('active');
-        });
-        e.target.classList.add('active');
-
-        // Obtener filtro y re-renderizar el gráfico
-        const filterType = e.target.dataset.filter; // 'all', 'simulacro', 'minisimulacro'
-        renderGrowthChart(CURRENT_STUDENT_REPORTS, filterType);
-    }
-}
-
-/**
- * Renderiza la gráfica de crecimiento del estudiante (Mejora 2).
- * @param {Array} studentReports - Array de reportes del estudiante (de SCORES_DB).
- * @param {string} filterType - 'all', 'simulacro', o 'minisimulacro'.
+ * (v5.1) Renderiza la gráfica de crecimiento del estudiante.
+ * @param {Array} studentReports - Array de reportes del estudiante (DEBE ESTAR PRE-ORDENADO)
+ * @param {string} filterType - 'all', 'simulacro', o 'minisimulacro'
  */
 function renderGrowthChart(studentReports, filterType = 'all') {
     const ctx = document.getElementById('growthChart')?.getContext('2d');
     if (!ctx) return;
 
-    // 1. Filtrar Datos
-    const filteredReports = studentReports
-        .filter(report => {
-            const testType = TEST_INDEX[report.test_id]?.type;
-            if (filterType === 'all') {
-                return true;
-            }
-            return testType === filterType;
-        })
-        .sort((a, b) => new Date(a.test_date) - new Date(b.test_date)); // Orden cronológico
+    // 1. FILTRAR DATOS
+    const filteredReports = studentReports.filter(report => {
+        const testType = TEST_INDEX[report.test_id]?.type;
+        if (filterType === 'all') return true;
+        return testType === filterType;
+    });
 
-    // 2. Preparar Datos para Chart.js
+    // 2. PREPARAR DATOS PARA CHART.JS
     const chartData = filteredReports.map(report => ({
-        x: new Date(report.test_date).getTime(), // Usar timestamp para el eje X
-        y: report.global_score
+        x: new Date(report.test_date).valueOf(), // Usar timestamp para Chart.js
+        y: parseInt(report.global_score, 10)
     }));
     
-    const chartLabels = filteredReports.map(report => TEST_INDEX[report.test_id]?.name || 'Prueba');
+    // Invertir datos para que la fecha más antigua esté primero (Chart.js lo prefiere)
+    chartData.reverse(); 
 
-    // 3. Destruir gráfico anterior
+    // 3. RENDERIZAR GRÁFICO
     if (window.myGrowthChart instanceof Chart) {
         window.myGrowthChart.destroy();
     }
 
-    // 4. Renderizar nuevo gráfico
     window.myGrowthChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: chartLabels, // Usar nombres como etiquetas
             datasets: [{
-                label: 'Puntaje Global (0-500)',
+                label: 'Puntaje Global',
                 data: chartData,
                 borderColor: 'var(--brand-secondary)',
                 backgroundColor: 'rgba(59, 130, 246, 0.1)',
                 fill: true,
-                tension: 0.1,
-                borderWidth: 2,
-                pointRadius: 4,
+                tension: 0.3,
+                borderWidth: 3,
                 pointBackgroundColor: 'var(--brand-secondary)',
+                pointRadius: 5,
+                pointHoverRadius: 7
             }]
         },
         options: {
@@ -547,690 +648,138 @@ function renderGrowthChart(studentReports, filterType = 'all') {
             maintainAspectRatio: false,
             scales: {
                 x: {
-                    // Usar 'category' para mostrar las etiquetas (nombres de prueba)
-                    type: 'category', 
+                    type: 'time',
+                    time: {
+                        unit: 'month',
+                        tooltipFormat: 'dd MMM yyyy',
+                        displayFormats: {
+                            month: 'MMM yyyy'
+                        }
+                    },
                     title: {
                         display: true,
-                        text: 'Pruebas Realizadas (en orden cronológico)'
+                        text: 'Fecha de la Prueba'
+                    },
+                    grid: {
+                        display: false
                     }
                 },
                 y: {
-                    beginAtZero: true,
-                    max: 500,
                     title: {
                         display: true,
-                        text: 'Puntaje Global'
+                        text: 'Puntaje Global (0-500)'
+                    },
+                    min: 0,
+                    max: 500,
+                    grid: {
+                        color: '#e5e7eb' // brand-border
                     }
                 }
             },
             plugins: {
+                legend: {
+                    display: false
+                },
                 tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    padding: 12,
+                    titleFont: { weight: 'bold' },
+                    bodyFont: { size: 14 },
                     callbacks: {
                         title: (tooltipItems) => {
-                            // Mostrar el nombre de la prueba en el tooltip
-                            return tooltipItems[0].label;
+                            const date = new Date(tooltipItems[0].parsed.x);
+                            return date.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
                         },
                         label: (tooltipItem) => {
-                            // Mostrar puntaje y fecha
-                            const report = filteredReports[tooltipItem.dataIndex];
-                            const date = new Date(report.test_date).toLocaleDateString('es-CO');
-                            return `Puntaje: ${report.global_score} (Fecha: ${date})`;
+                            return ` Puntaje: ${tooltipItem.parsed.y}`;
                         }
                     }
                 }
+            },
+            interaction: {
+                mode: 'nearest',
+                axis: 'x',
+                intersect: false
             }
         }
     });
 }
 
 
-// --- 5. DASHBOARD DEL ADMINISTRADOR ---
-
-/**
- * Muestra el dashboard del administrador y calcula métricas globales.
- * @param {boolean} shouldShow - Si es true, muestra la sección.
- */
-function showAdminDashboard(shouldShow = true) {
-    if (shouldShow) {
-        showSection('admin-dashboard');
-    }
-
-    // (NUEVO v5) Calcular y mostrar KPIs
-    const totalStudents = ALL_STUDENTS_ARRAY.length;
-    const totalTests = Object.keys(TEST_INDEX).length;
-    
-    const simulacroScores = SCORES_DB
-        .filter(score => TEST_INDEX[score.test_id]?.type === 'simulacro')
-        .map(score => score.global_score);
-    const miniScores = SCORES_DB
-        .filter(score => TEST_INDEX[score.test_id]?.type === 'minisimulacro')
-        .map(score => score.global_score);
-
-    const avgSimulacro = simulacroScores.length ? (simulacroScores.reduce((a, b) => a + b, 0) / simulacroScores.length).toFixed(0) : 'N/A';
-    const avgMini = miniScores.length ? (miniScores.reduce((a, b) => a + b, 0) / miniScores.length).toFixed(0) : 'N/A';
-
-    document.getElementById('kpi-total-students').textContent = totalStudents;
-    document.getElementById('kpi-total-tests').textContent = totalTests;
-    document.getElementById('kpi-avg-simulacro').textContent = avgSimulacro;
-    document.getElementById('kpi-avg-mini').textContent = avgMini;
-
-
-    // Poblar pestañas de Admin (NUEVO v5)
-    const adminTabsContainer = document.getElementById('admin-tabs');
-    adminTabsContainer.innerHTML = ''; // Limpiar
-    const adminTabs = [
-        { id: 'students', name: 'Gestión de Estudiantes' },
-        { id: 'stats', name: 'Análisis Estadístico' },
-        { id: 'crud', name: 'Gestión de Contenido (CRUD)' },
-    ];
-    adminTabs.forEach((tab, index) => {
-        const isActive = index === 0;
-        adminTabsContainer.innerHTML += `
-            <button class="admin-tab-btn ${isActive ? 'active' : ''}" data-target="tab-panel-${tab.id}">
-                ${tab.name}
-            </button>
-        `;
-        // Ocultar todos los paneles (JS se encargará de mostrar el activo)
-        const panel = document.getElementById(`tab-panel-${tab.id}`);
-        if(panel) panel.style.display = isActive ? 'block' : 'none';
-    });
-
-    // Poblar selector de pruebas (Análisis Estadístico)
-    const statsTestSelect = document.getElementById('stats-test-select');
-    statsTestSelect.innerHTML = '<option value="">Seleccione una prueba</option>';
-    for (const testId in TEST_INDEX) {
-        statsTestSelect.innerHTML += `<option value="${testId}">${TEST_INDEX[testId].name}</option>`;
-    }
-
-    // Renderizar tabla de estudiantes (Pestaña 1)
-    renderAdminTable();
-}
-
-/**
- * Maneja el cambio de pestañas en el panel de admin.
- * @param {Event} e - El evento de clic.
- */
-function handleAdminTabSwitch(e) {
-    const tabButton = e.target.closest('.admin-tab-btn');
-    if (!tabButton) return;
-
-    // Quitar 'active' de todas las pestañas
-    document.querySelectorAll('#admin-tabs .admin-tab-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    // Añadir 'active' a la pestaña clicada
-    tabButton.classList.add('active');
-
-    // Ocultar todos los paneles
-    document.querySelectorAll('.admin-tab-panel').forEach(panel => {
-        panel.style.display = 'none';
-    });
-    // Mostrar el panel objetivo
-    const targetPanelId = tabButton.dataset.target;
-    document.getElementById(targetPanelId).style.display = 'block';
-}
-
-/**
- * Maneja el cambio de sub-pestañas en el panel de CRUD.
- * @param {Event} e - El evento de clic.
- */
-function handleCrudTabSwitch(e) {
-    const tabButton = e.target.closest('.crud-tab-btn');
-    if (!tabButton) return;
-
-    document.querySelectorAll('#crud-tabs .crud-tab-btn').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    tabButton.classList.add('active');
-
-    document.querySelectorAll('.crud-tab-panel').forEach(panel => {
-        panel.style.display = 'none';
-    });
-    const targetPanelId = tabButton.dataset.target;
-    document.getElementById(targetPanelId).style.display = 'block';
-}
-
-
-/**
- * Renderiza la tabla de estudiantes del admin, con paginación, búsqueda y orden.
- * @param {string} [searchTerm=''] - Término de búsqueda para filtrar.
- */
-function renderAdminTable(searchTerm = '') {
-    const tableBody = document.getElementById('admin-table-body');
-    const paginationContainer = document.getElementById('admin-pagination');
-    if (!tableBody || !paginationContainer) return;
-
-    // 1. Filtrar (Búsqueda)
-    const lowerSearchTerm = searchTerm.toLowerCase();
-    let filteredData = ALL_STUDENTS_ARRAY;
-    if (lowerSearchTerm) {
-        filteredData = ALL_STUDENTS_ARRAY.filter(student => 
-            student['Nombre Completo del Estudiante'].toLowerCase().includes(lowerSearchTerm) ||
-            student['Número de Documento'].toLowerCase().includes(lowerSearchTerm)
-        );
-    }
-
-    // 2. Ordenar (Sort)
-    filteredData.sort((a, b) => {
-        const col = currentAdminSort.column;
-        const valA = a[col] || '';
-        const valB = b[col] || '';
-        
-        const comparison = valA.localeCompare(valB, 'es', { numeric: true });
-        return currentAdminSort.direction === 'asc' ? comparison : -comparison;
-    });
-
-    // 3. Paginar
-    const totalItems = filteredData.length;
-    const totalPages = Math.ceil(totalItems / ADMIN_ROWS_PER_PAGE);
-    if (currentAdminPage > totalPages) currentAdminPage = 1;
-
-    const startIndex = (currentAdminPage - 1) * ADMIN_ROWS_PER_PAGE;
-    const endIndex = startIndex + ADMIN_ROWS_PER_PAGE;
-    const paginatedData = filteredData.slice(startIndex, endIndex);
-
-    // 4. Renderizar Tabla
-    tableBody.innerHTML = '';
-    if (paginatedData.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-gray-500">No se encontraron estudiantes.</td></tr>`;
-    } else {
-        paginatedData.forEach(student => {
-            const docNumber = student['Número de Documento'];
-            tableBody.innerHTML += `
-                <tr class="hover:bg-gray-50">
-                    <td class="admin-td font-medium text-brand-header">${student['Nombre Completo del Estudiante']}</td>
-                    <td class="admin-td text-gray-600">${student['Tipo de Documento']} ${docNumber}</td>
-                    <td class="admin-td text-gray-600">${student['Email']}</td>
-                    <td class="admin-td text-gray-600">${student['Colegio/institución']}</td>
-                    <td class="admin-td">
-                        <button class="view-report-btn text-brand-secondary hover:text-brand-blue-dark font-medium" data-student-id="${docNumber}">
-                            Ver Historial
-                        </button>
-                    </td>
-                </tr>
-            `;
-        });
-    }
-
-    // 5. Renderizar Paginación
-    paginationContainer.innerHTML = `
-        <span class="text-sm text-gray-600">
-            Mostrando ${startIndex + 1}-${Math.min(endIndex, totalItems)} de ${totalItems}
-        </span>
-        <div>
-            <button class="pagination-btn" ${currentAdminPage === 1 ? 'disabled' : ''} data-page="${currentAdminPage - 1}">
-                Anterior
-            </button>
-            <button class="pagination-btn" ${currentAdminPage === totalPages || totalPages === 0 ? 'disabled' : ''} data-page="${currentAdminPage + 1}">
-                Siguiente
-            </button>
-        </div>
-    `;
-}
-
-/**
- * Maneja el clic en las cabeceras de la tabla de admin para ordenar.
- * @param {Event} e - El evento de clic.
- */
-function handleAdminTableSort(e) {
-    const th = e.target.closest('th');
-    if (!th || !th.dataset.sort) return;
-
-    const column = th.dataset.sort;
-    
-    // Cambiar dirección o cambiar de columna
-    if (currentAdminSort.column === column) {
-        currentAdminSort.direction = currentAdminSort.direction === 'asc' ? 'desc' : 'asc';
-    } else {
-        currentAdminSort.column = column;
-        currentAdminSort.direction = 'asc';
-    }
-
-    // Actualizar UI de cabeceras
-    document.querySelectorAll('#admin-dashboard th[data-sort]').forEach(header => {
-        header.querySelector('span').textContent = '';
-        if (header.dataset.sort === column) {
-            header.querySelector('span').textContent = currentAdminSort.direction === 'asc' ? '▲' : '▼';
-        }
-    });
-
-    // Re-renderizar tabla
-    renderAdminTable(document.getElementById('admin-search-input').value);
-}
-
-/**
- * Maneja el clic en los botones de paginación del admin.
- * @param {Event} e - El evento de clic.
- */
-function handleAdminPagination(e) {
-    const button = e.target.closest('.pagination-btn');
-    if (button && !button.disabled) {
-        currentAdminPage = parseInt(button.dataset.page, 10);
-        renderAdminTable(document.getElementById('admin-search-input').value);
-    }
-}
-
-/**
- * Muestra el historial de informes de un estudiante en un modal (Admin).
- * @param {string} docNumber - El número de documento del estudiante.
- */
-function showAdminStudentHistory(docNumber) {
-    const studentData = STUDENT_DB[docNumber];
-    if (!studentData) return;
-
-    const studentReports = SCORES_DB.filter(score => score.doc_number === docNumber);
-    const modalHeader = document.getElementById('admin-modal-header');
-    const modalBody = document.getElementById('admin-modal-body');
-
-    modalHeader.textContent = `Historial de: ${studentData['Nombre Completo del Estudiante']}`;
-    modalBody.innerHTML = ''; // Limpiar
-
-    if (studentReports.length === 0) {
-        modalBody.innerHTML = '<p class="text-gray-500 col-span-full">Este estudiante no tiene informes.</p>';
-        openModal(document.getElementById('admin-modal-backdrop'));
-        return;
-    }
-    
-    // Ordenar (más reciente primero)
-    studentReports.sort((a, b) => new Date(b.test_date) - new Date(a.test_date));
-
-    studentReports.forEach(report => {
-        const testInfo = TEST_INDEX[report.test_id];
-        if (!testInfo) return;
-
-        const isSimulacro = testInfo.type === 'simulacro';
-        const badgeColor = isSimulacro ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800';
-        const badgeText = isSimulacro ? 'Simulacro' : 'Minisimulacro';
-        
-        // (NUEVO) Añadir data-doc-number a la tarjeta
-        modalBody.innerHTML += `
-            <div class="report-card admin-report-card" data-testid="${report.test_id}" data-doc-number="${docNumber}">
-                <div class="report-card-header">
-                    <div>
-                        <h3 class="report-card-title">${testInfo.name}</h3>
-                        <p class="report-card-date text-sm text-gray-500">Realizado: ${new Date(report.test_date).toLocaleDateString('es-CO')}</p>
-                    </div>
-                    <span class="report-card-badge ${badgeColor}">${badgeText}</span>
-                </div>
-                <div class="report-card-body">
-                    <div class="report-card-score">
-                        <span class="text-lg font-medium text-brand-text">Puntaje Global</span>
-                        <span class="global-score">${report.global_score}</span>
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-
-    openModal(document.getElementById('admin-modal-backdrop'));
-}
-
-/**
- * Maneja el clic en una tarjeta de informe DENTRO del modal de admin.
- * @param {Event} e - El evento de clic.
- */
-async function handleAdminModalCardClick(e) {
-    const card = e.target.closest('.admin-report-card');
-    if (!card || !card.dataset.testid) return;
-
-    const testId = card.dataset.testid;
-    const docNumber = card.dataset.docNumber;
-
-    // Simular el estado de "estudiante" para mostrar el informe
-    CURRENT_STUDENT_DATA = STUDENT_DB[docNumber];
-    CURRENT_STUDENT_REPORTS = SCORES_DB.filter(score => score.doc_number === docNumber);
-    isAdminViewingReport = true; // Poner bandera de admin
-
-    closeModal(document.getElementById('admin-modal-backdrop')); // Cerrar modal de admin
-    
-    // Mostrar el informe (la función se encargará del resto)
-    await showIndividualReport(testId); 
-
-    // Limpiar estado
-    isAdminViewingReport = false;
-    // (No limpiar CURRENT_STUDENT... por si quiere ver otro informe)
-}
-
-
-// --- 6. VISTA DE INFORME INDIVIDUAL (Estudiante y Admin) ---
-
-/**
- * (NUEVO v5.1) Función de ayuda para mostrar la carga
- * dentro de showIndividualReport.
- */
-function showReportLoading(message) {
-    const loadingScreen = document.getElementById('loading-section');
-    const loadingMessage = document.getElementById('loading-message');
-    const loadingError = document.getElementById('loading-error');
-    
-    if(loadingMessage) loadingMessage.textContent = message;
-    if(loadingError) loadingError.style.display = 'none';
-    
-    showSection('loading-section');
-}
+// --- 5. LÓGICA DEL INFORME INDIVIDUAL ---
 
 /**
  * Muestra el informe detallado de una prueba específica.
- * (CORREGIDO v5.1: Se movió la lógica de carga a 'showReportLoading')
- * @param {string} testId - El ID de la prueba (ej. "sg11_07").
+ * (v5.1) Modificado para aceptar datos de estudiante (para suplantación de admin)
+ * @param {string} testId
+ * @param {Object} [studentData=CURRENT_STUDENT_DATA] - Datos del estudiante (opcional)
+ * @param {Array} [studentReports=CURRENT_STUDENT_REPORTS] - Reportes del estudiante (opcional)
  */
-async function showIndividualReport(testId) {
-    showReportLoading('Cargando datos del informe...');
+async function showIndividualReport(testId, studentData = CURRENT_STUDENT_DATA, studentReports = CURRENT_STUDENT_REPORTS) {
+    // (v6) Mostrar el panel de informe
+    showPanel('report-content-section', ''); // No hay enlace de sidebar para esto
+    
+    const reportHeader = document.getElementById('report-header');
+    const reportBody = document.getElementById('report-body-content');
+    const backBtn = document.getElementById('back-to-dashboard-btn');
+
+    // Configurar botón de "Volver"
+    backBtn.style.display = 'block';
+    
+    // Mostrar estado de carga
+    reportHeader.querySelector('h1').textContent = 'Cargando informe...';
+    reportHeader.querySelector('p').textContent = '';
+    reportBody.innerHTML = `
+        <div class="text-center py-10">
+            <svg class="animate-spin h-8 w-8 text-brand-secondary mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="mt-3 text-gray-600">Cargando datos de la prueba...</p>
+        </div>`;
 
     try {
         const testInfo = TEST_INDEX[testId];
-        const report = CURRENT_STUDENT_REPORTS.find(r => r.test_id === testId);
-        
-        if (!testInfo || !report) {
-            throw new Error(`No se encontraron datos para el informe ${testId}`);
+        const report = studentReports.find(r => r.test_id === testId);
+        if (!testInfo || !report || !studentData) {
+            throw new Error("No se encontraron los datos del informe.");
         }
 
-        // 1. Poblar cabecera
-        document.getElementById('report-title').textContent = `Reporte: ${testInfo.name}`;
-        document.getElementById('report-student-name').textContent = `Estudiante: ${CURRENT_STUDENT_DATA['Nombre Completo del Estudiante']}`;
-
-        // 2. Poblar puntaje global
-        const globalScore = report.global_score;
-        document.getElementById('report-global-score').textContent = globalScore;
-        document.getElementById('report-global-bar').style.width = `${globalScore / 5}%`;
-        // (Falta lógica de promedio grupal, se omite por ahora)
-        document.getElementById('report-global-avg').textContent = `Promedio Grupal: N/A`;
-
-        // 3. Poblar tarjetas de materias y Gráfico Radar
-        const radarData = [];
-        const subjectAreas = [
-            { key: 'mat', name: 'Matemáticas', score: report.mat_score, icon: 'img/Matematicas (logo).svg', color: 'var(--color-matematicas)' },
-            { key: 'lec', name: 'Lectura Crítica', score: report.lec_score, icon: 'img/Lectura Crítica (logo).svg', color: 'var(--color-lectura)' },
-            { key: 'soc', name: 'Sociales', score: report.soc_score, icon: 'img/Ciudadanas (logo).svg', color: 'var(--color-sociales)' },
-            { key: 'cie', name: 'Ciencias', score: report.cie_score, icon: 'img/Ciencias (logo).svg', color: 'var(--color-ciencias)' },
-            { key: 'ing', name: 'Inglés', score: report.ing_score, icon: 'img/Inglés (logo).svg', color: 'var(--color-ingles)' },
-        ];
+        // Cargar datos de la prueba (claves y respuestas)
+        const { keys, answers } = await getTestAnswersAndKey(testId, studentData['Número de Documento']);
         
-        const subjectsContainer = document.querySelector('#report-section .grid[class*="lg:grid-cols-3"]');
-        subjectsContainer.innerHTML = ''; // Limpiar tarjetas de materias
+        // Cargar videos de retroalimentación
+        const videoLinks = await getTestVideoLinks(testId);
+
+        // Actualizar cabecera
+        reportHeader.querySelector('h1').textContent = testInfo.name;
+        reportHeader.querySelector('p').textContent = `Realizado el: ${new Date(report.test_date).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}`;
         
-        subjectAreas.forEach(subject => {
-            const score = subject.score;
-            radarData.push(score);
-            // (Lógica de Nivel y Avg se omite por simplicidad)
-            const level = 'N/A';
-            const avg = 'N/A';
+        // Generar HTML del informe
+        const reportHTML = generateReportHTML(report, keys, answers, videoLinks, testId);
+        reportBody.innerHTML = reportHTML;
 
-            subjectsContainer.innerHTML += `
-                <div class="subject-card" style="--subject-color: ${subject.color}">
-                    <div class="subject-card-header">
-                        <img src="${subject.icon}" class="subject-card-icon" alt="${subject.name}">
-                        <span class="subject-card-title">${subject.name}</span>
-                    </div>
-                    <div class="subject-card-score">
-                        <span>${score}</span> / 100
-                    </div>
-                    <div class="subject-card-bar-container">
-                        <div class="subject-card-bar" style="width: ${score}%;"></div>
-                    </div>
-                    <div class="subject-card-footer">
-                        <span>Nivel: ${level}</span>
-                        <span>Avg: ${avg}</span>
-                    </div>
-                </div>
-            `;
-        });
+        // Renderizar el Gráfico de Radar (Mejora 2)
+        renderRadarChart(report, testId);
         
-        // Renderizar Gráfico Radar (Mejora 2)
-        renderRadarChart(radarData, testInfo.name);
-
-        // 4. Cargar datos de la prueba (Claves y Respuestas)
-        showReportLoading('Cargando detalle de preguntas...');
-        const { studentAnswers, correctKeys, videoLinks } = await loadTestData(testId, CURRENT_STUDENT_DATA['Número de Documento']);
-
-        // 5. Configurar Pestañas (Simulacro vs. Minisimulacro)
-        const tabsNav = document.getElementById('report-tabs-nav');
-        const s1Panel = document.getElementById('tab-panel-s1');
-        const s2Panel = document.getElementById('tab-panel-s2');
-        const s1Title = document.getElementById('report-s1-title');
-        
-        if (testInfo.type === 'simulacro') {
-            // --- VISTA SIMULACRO (2 Pestañas) ---
-            tabsNav.innerHTML = `
-                <button class="report-tab-btn active" data-target="tab-panel-s1">Sesión 1</button>
-                <button class="report-tab-btn" data-target="tab-panel-s2">Sesión 2</button>
-            `;
-            tabsNav.style.display = 'flex';
-            s1Panel.style.display = 'block';
-            s2Panel.style.display = 'none'; // Ocultar s2 por defecto
-            s1Title.textContent = 'Retroalimentación (Sesión 1)';
-
-            // Asignar listeners a las nuevas pestañas
-            tabsNav.querySelectorAll('.report-tab-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    tabsNav.querySelectorAll('.report-tab-btn').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    document.querySelectorAll('.report-tab-panel').forEach(p => p.style.display = 'none');
-                    document.getElementById(btn.dataset.target).style.display = 'block';
-                });
-            });
-
-            // Poblar ambas pestañas
-            const s1Keys = correctKeys.s1 || {};
-            const s1Answers = studentAnswers.s1 || {};
-            populateFeedbackPanel('s1', s1Keys, s1Answers, videoLinks);
-
-            const s2Keys = correctKeys.s2 || {};
-            const s2Answers = studentAnswers.s2 || {};
-            populateFeedbackPanel('s2', s2Keys, s2Answers, videoLinks);
-
-        } else {
-            // --- VISTA MINISIMULACRO (1 Pestaña) ---
-            tabsNav.innerHTML = '';
-            tabsNav.style.display = 'none';
-            s1Panel.style.display = 'block';
-            s2Panel.style.display = 'none';
-            s1Title.textContent = 'Retroalimentación';
-            
-            // Poblar el panel único
-            populateFeedbackPanel('s1', correctKeys, studentAnswers, videoLinks);
-        }
-
-        // 6. Mostrar la sección del informe
-        showSection('report-section');
+        // Inicializar iconos y listeners de los acordeones
+        lucide.createIcons();
+        setupAccordionListeners();
 
     } catch (error) {
-        console.error('Error al mostrar el informe:', error);
-        // Mostrar el error en la pantalla de carga
-        const loadingMessage = document.getElementById('loading-message');
-        const loadingError = document.getElementById('loading-error');
-        if(loadingMessage) loadingMessage.textContent = 'Error al cargar el informe.';
-        if(loadingError) {
-            loadingError.textContent = error.message;
-            loadingError.style.display = 'block';
-        }
-        // No volver al dashboard, permitir que el usuario vea el error
-        // showSection('student-dashboard'); 
-        alert(`Error al cargar el informe: ${error.message}`);
+        console.error("Error al mostrar informe individual:", error);
+        reportBody.innerHTML = `<p class="text-brand-red text-center">Error al cargar el informe: ${error.message}</p>`;
     }
 }
 
 /**
- * Carga los datos de una prueba (claves, respuestas del estudiante y videos).
- * Maneja la lógica de caché.
- * @param {string} testId - El ID de la prueba.
- * @param {string} docNumber - El documento del estudiante.
- * @returns {Object} - { studentAnswers, correctKeys, videoLinks }
+ * (v5.1) Renderiza el Gráfico de Radar para el informe.
  */
-async function loadTestData(testId, docNumber) {
-    const testInfo = TEST_INDEX[testId];
-    
-    // Si no está en caché, cargarlo
-    if (!CACHED_TEST_DATA[testId]) {
-        CACHED_TEST_DATA[testId] = {};
-        const isSimulacro = testInfo.type === 'simulacro';
-
-        // 1. Cargar Claves
-        if (isSimulacro) {
-            const [keys_s1, keys_s2] = await Promise.all([
-                fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.keys_s1}`),
-                fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.keys_s2}`)
-            ]);
-            // Guardar claves como un mapa { Pregunta: Respuesta }
-            CACHED_TEST_DATA[testId].keys = {
-                s1: keys_s1[0] || {},
-                s2: keys_s2[0] || {}
-            };
-        } else {
-            const keys = await fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.keys}`);
-            CACHED_TEST_DATA[testId].keys = keys[0] || {};
-        }
-        
-        // 2. Cargar Respuestas (¡TODOS los estudiantes, para el análisis!)
-        if (isSimulacro) {
-            const [ans_s1, ans_s2] = await Promise.all([
-                fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.answers_s1}`),
-                fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.answers_s2}`)
-            ]);
-            // Guardar respuestas como un mapa { doc_number: { ...respuestas } }
-            CACHED_TEST_DATA[testId].answers = {
-                s1: ans_s1.reduce((acc, row) => { acc[row.ID] = row; return acc; }, {}),
-                s2: ans_s2.reduce((acc, row) => { acc[row.ID] = row; return acc; }, {})
-            };
-        } else {
-            const ans = await fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.answers}`);
-            CACHED_TEST_DATA[testId].answers = ans.reduce((acc, row) => { acc[row.ID] = row; return acc; }, {});
-        }
-        
-        // 3. Cargar Videos
-        const videoResponse = await fetch(`${BASE_DATA_URL}${testInfo.videos}?t=${TIMESTAMP}`);
-        const videoText = await videoResponse.text();
-        CACHED_TEST_DATA[testId].videos = parseVideoText(videoText);
-    }
-
-    // 4. Devolver los datos (desde el caché)
-    const cached = CACHED_TEST_DATA[testId];
-    const isSimulacro = testInfo.type === 'simulacro';
-
-    if (isSimulacro) {
-        return {
-            studentAnswers: {
-                s1: cached.answers.s1[docNumber] || {},
-                s2: cached.answers.s2[docNumber] || {}
-            },
-            correctKeys: cached.keys, // { s1: {...}, s2: {...} }
-            videoLinks: cached.videos
-        };
-    } else {
-        return {
-            studentAnswers: cached.answers[docNumber] || {},
-            correctKeys: cached.keys, // { "Pregunta 1": "A", ... }
-            videoLinks: cached.videos
-        };
-    }
-}
-
-/**
- * Pobla un panel de feedback (videos y preguntas).
- * @param {string} panelSuffix - 's1' o 's2'.
- * @param {Object} correctKeys - Mapa de { Pregunta: Respuesta }.
- * @param {Object} studentAnswers - Mapa de { Pregunta: Respuesta }.
- * @param {Object} videoLinks - Objeto de videos parseados.
- */
-function populateFeedbackPanel(panelSuffix, correctKeys, studentAnswers, videoLinks) {
-    const videoContainer = document.getElementById(`report-videos-${panelSuffix}`);
-    const questionsContainer = document.getElementById(`report-questions-${panelSuffix}`).querySelector('.question-list-container');
-    
-    videoContainer.innerHTML = '';
-    questionsContainer.innerHTML = '';
-    
-    // 1. Poblar Videos
-    // (Lógica de videos por rango de puntaje/desempeño omitida por simplicidad)
-    // (Mostrando todos los videos de las áreas presentes en esta sesión)
-    const areasInThisSession = new Set(Object.keys(correctKeys).map(q => q.split(' ')[0].toUpperCase()));
-    const videoGrid = videoContainer.querySelector('.video-grid');
-    if (videoGrid) {
-        videoLinks.forEach(video => {
-            if (areasInThisSession.has(video.subject.toUpperCase())) {
-                videoGrid.innerHTML += createVideoCardHTML(video);
-            }
-        });
-        if (!videoGrid.innerHTML) {
-            videoContainer.innerHTML = '<p class="text-gray-500">No hay videos recomendados para esta sesión.</p>';
-        }
-    }
-
-
-    // 2. Poblar Preguntas
-    for (const questionName in correctKeys) {
-        // Omitir columnas que no son preguntas (como ID, Email, etc.)
-        if (!studentAnswers.hasOwnProperty(questionName)) continue; 
-        
-        const correctAnswer = correctKeys[questionName];
-        const studentAnswer = studentAnswers[questionName] || 'Omitida';
-        const isCorrect = studentAnswer === correctAnswer;
-        
-        const statusClass = isCorrect ? 'correct' : 'incorrect';
-        const statusIconBg = isCorrect ? 'bg-brand-green' : 'bg-brand-red';
-        const statusIcon = isCorrect ? '&#10003;' : '&#10005;'; // Check o X
-        
-        // Extraer materia del nombre de la pregunta (ej. "Matemáticas S1 [1.]")
-        const subject = questionName.split(' ')[0];
-
-        questionsContainer.innerHTML += `
-            <div class="question-row ${statusClass}">
-                <div class="question-info">
-                    <span class="question-title">${questionName}</span>
-                    <div class="question-answers">
-                        <span>Tu Rta: <strong class="font-bold">${studentAnswer}</strong></span>
-                        ${!isCorrect ? `<span>Rta Correcta: <strong class="font-bold">${correctAnswer}</strong></span>` : ''}
-                    </div>
-                </div>
-                <div class="question-status-icon ${statusIconBg}">
-                    ${statusIcon}
-                </div>
-            </div>
-        `;
-    }
-}
-
-/**
- * Crea el HTML para una tarjeta de video.
- * @param {Object} video - Objeto de video (subject, range, url, title, img).
- * @returns {string} - El string HTML de la tarjeta.
- */
-function createVideoCardHTML(video) {
-    // (NUEVO v5) Diseño mejorado de tarjeta de video
-    // Extraer ID de YouTube para la miniatura
-    let thumbnailUrl = 'img/Saber 11 (logo).svg'; // Fallback
-    const youtubeId = video.url.match(/(?:v=|\/embed\/|\/youtu.be\/)([a-zA-Z0-9_-]{11})/);
-    if (youtubeId && youtubeId[1]) {
-        thumbnailUrl = `https://img.youtube.com/vi/${youtubeId[1]}/mqdefault.jpg`;
-    }
-
-    return `
-        <div class="video-card">
-            <a href="${video.url}" target="_blank" rel="noopener noreferrer" class="video-thumbnail-link">
-                <img src="${thumbnailUrl}" alt="Miniatura de ${video.title}" class="video-thumbnail" onerror="this.src='img/Saber 11 (logo).svg'">
-                <div class="video-play-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
-                    </svg>
-                </div>
-            </a>
-            <div class="video-info">
-                <h4 class="video-title">${video.title}</h4>
-                <p class="video-subject">${video.subject} (Preguntas ${video.range})</p>
-            </div>
-        </div>
-    `;
-}
-
-/**
- * Renderiza el gráfico de Radar (Mejora 2).
- * @param {Array<number>} data - Array de 5 puntajes [mat, lec, soc, cie, ing].
- * @param {string} testName - Nombre de la prueba.
- */
-function renderRadarChart(data, testName) {
+function renderRadarChart(report, testId) {
     const radarCtx = document.getElementById('radarChart')?.getContext('2d');
-    if (!radarCtx) return;
+    if (!radarCtx || !report) return;
 
-    // Destruir gráfico anterior
     if (window.myRadarChart instanceof Chart) {
         window.myRadarChart.destroy();
     }
@@ -1238,27 +787,33 @@ function renderRadarChart(data, testName) {
     window.myRadarChart = new Chart(radarCtx, {
         type: 'radar',
         data: {
-            labels: ['Matemáticas', 'Lectura', 'Sociales', 'Ciencias', 'Inglés'],
+            labels: ['Matemáticas', 'Lectura Crítica', 'Sociales', 'Ciencias', 'Inglés'],
             datasets: [{
-                label: `Puntajes (0-100) - ${testName}`,
-                data: data,
+                label: `Puntajes (0-100)`,
+                data: [
+                    report.mat_score,
+                    report.lec_score,
+                    report.soc_score,
+                    report.cie_score,
+                    report.ing_score
+                ],
                 backgroundColor: 'rgba(59, 130, 246, 0.2)',
                 borderColor: 'rgba(59, 130, 246, 1)',
                 borderWidth: 2,
                 pointBackgroundColor: 'rgba(59, 130, 246, 1)',
                 pointBorderColor: '#fff',
+                pointHoverBackgroundColor: '#fff',
+                pointHoverBorderColor: 'rgba(59, 130, 246, 1)'
             }]
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false, // Permitir que no sea cuadrado
+            maintainAspectRatio: true,
             scales: {
                 r: {
                     angleLines: { color: 'rgba(0, 0, 0, 0.1)' },
                     grid: { color: 'rgba(0, 0, 0, 0.1)' },
-                    pointLabels: {
-                        font: { size: 12, weight: 'bold' }
-                    },
+                    pointLabels: { font: { size: 13, weight: '600' } },
                     ticks: {
                         beginAtZero: true,
                         min: 0,
@@ -1271,125 +826,804 @@ function renderRadarChart(data, testName) {
             },
             plugins: {
                 legend: {
-                    display: false // Ocultar leyenda, es redundante
+                    display: false
                 }
             }
         }
     });
 }
 
+/**
+ * Genera el HTML completo para el cuerpo de un informe.
+ */
+function generateReportHTML(report, keys, answers, videoLinks, testId) {
+    const testInfo = TEST_INDEX[testId];
+    
+    // (v5) Función para Nivel de Desempeño
+    const getLevel = (score) => {
+        if (score >= 80) return { text: 'Avanzado', color: 'text-green-600' };
+        if (score >= 60) return { text: 'Satisfactorio', color: 'text-blue-600' };
+        if (score >= 40) return { text: 'Mínimo', color: 'text-yellow-600' };
+        return { text: 'Insuficiente', color: 'text-red-600' };
+    };
+    
+    const levels = {
+        mat: getLevel(report.mat_score),
+        lec: getLevel(report.lec_score),
+        soc: getLevel(report.soc_score),
+        cie: getLevel(report.cie_score),
+        ing: getLevel(report.ing_score), // Simplificado
+    };
 
-// --- 7. ANÁLISIS ESTADÍSTICO (Admin - Mejora 1) ---
+    // (v5) Lógica de pestañas (Simulacro vs Minisimulacro)
+    const isSimulacro = testInfo.type === 'simulacro';
+    
+    // Generar HTML de las pestañas
+    const tabsHTML = isSimulacro ? `
+        <div class="mb-6 border-b border-brand-border">
+            <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+                <button class="tab-btn active" data-tab="sesion1">Sesión 1</button>
+                <button class="tab-btn" data-tab="sesion2">Sesión 2</button>
+                <button class="tab-btn" data-tab="videos">Videos de Retroalimentación</button>
+            </nav>
+        </div>
+    ` : `
+        <div class="mb-6 border-b border-brand-border">
+            <nav class="-mb-px flex space-x-6" aria-label="Tabs">
+                <button class="tab-btn active" data-tab="sesion1">Resultados Detallados</button>
+                <button class="tab-btn" data-tab="videos">Videos de Retroalimentación</button>
+            </nav>
+        </div>
+    `;
+
+    // Generar HTML del feedback de preguntas
+    const feedbackS1HTML = generateFeedbackTable(keys.s1 || keys, answers.s1 || answers);
+    const feedbackS2HTML = isSimulacro ? generateFeedbackTable(keys.s2, answers.s2) : '';
+    const videoHTML = generateVideoLinksHTML(videoLinks);
+
+    // Contenido de las Pestañas
+    const tabsContentHTML = `
+        <div id="tab-content-sesion1" class="tab-content active">
+            ${feedbackS1HTML}
+        </div>
+        ${isSimulacro ? `
+        <div id="tab-content-sesion2" class="tab-content">
+            ${feedbackS2HTML}
+        </div>
+        ` : ''}
+        <div id="tab-content-videos" class="tab-content">
+            ${videoHTML}
+        </div>
+    `;
+
+    return `
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Columna Izquierda: Puntajes y Radar -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- Puntaje Global -->
+                <div class="bg-brand-surface p-6 rounded-2xl shadow-lg text-center">
+                    <p class="text-sm font-medium text-gray-600 uppercase tracking-wider">Puntaje Global</p>
+                    <p class="text-7xl font-extrabold text-brand-secondary my-2">${report.global_score}<span class="text-4xl font-medium text-gray-400">/500</span></p>
+                </div>
+                
+                <!-- (MEJORA 2) Gráfico de Radar -->
+                <div class="bg-brand-surface p-6 rounded-2xl shadow-lg">
+                    <h3 class="text-xl font-bold text-brand-header mb-4 text-center">
+                        Perfil de Desempeño
+                    </h3>
+                    <div class="w-full max-w-sm mx-auto h-72">
+                        <canvas id="radarChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Columna Derecha: Puntajes por Área -->
+            <div class="lg:col-span-2 bg-brand-surface p-6 rounded-2xl shadow-lg">
+                <h3 class="text-xl font-bold text-brand-header mb-6">Puntajes por Área</h3>
+                <div class="space-y-5">
+                    <!-- Matemáticas -->
+                    <div class="score-area-card">
+                        <div class="score-area-icon" style="--color: var(--color-matematicas);"><i data-lucide="calculator"></i></div>
+                        <div>
+                            <p class="font-bold text-lg text-brand-header">Matemáticas</p>
+                            <p class="font-medium ${levels.mat.color}">${levels.mat.text}</p>
+                        </div>
+                        <div class="text-3xl font-bold ml-auto">${report.mat_score}<span class="text-xl text-gray-400">/100</span></div>
+                    </div>
+                    <!-- Lectura Crítica -->
+                    <div class="score-area-card">
+                        <div class="score-area-icon" style="--color: var(--color-lectura);"><i data-lucide="book-open"></i></div>
+                        <div>
+                            <p class="font-bold text-lg text-brand-header">Lectura Crítica</p>
+                            <p class="font-medium ${levels.lec.color}">${levels.lec.text}</p>
+                        </div>
+                        <div class="text-3xl font-bold ml-auto">${report.lec_score}<span class="text-xl text-gray-400">/100</span></div>
+                    </div>
+                    <!-- Sociales -->
+                    <div class="score-area-card">
+                        <div class="score-area-icon" style="--color: var(--color-sociales);"><i data-lucide="landmark"></i></div>
+                        <div>
+                            <p class="font-bold text-lg text-brand-header">Sociales y Ciudadanas</p>
+                            <p class="font-medium ${levels.soc.color}">${levels.soc.text}</p>
+                        </div>
+                        <div class="text-3xl font-bold ml-auto">${report.soc_score}<span class="text-xl text-gray-400">/100</span></div>
+                    </div>
+                    <!-- Ciencias -->
+                    <div class="score-area-card">
+                        <div class="score-area-icon" style="--color: var(--color-ciencias);"><i data-lucide="flask-conical"></i></div>
+                        <div>
+                            <p class="font-bold text-lg text-brand-header">Ciencias Naturales</p>
+                            <p class="font-medium ${levels.cie.color}">${levels.cie.text}</p>
+                        </div>
+                        <div class="text-3xl font-bold ml-auto">${report.cie_score}<span class="text-xl text-gray-400">/100</span></div>
+                    </div>
+                    <!-- Inglés -->
+                    <div class="score-area-card">
+                        <div class="score-area-icon" style="--color: var(--color-ingles);"><i data-lucide="globe-2"></i></div>
+                        <div>
+                            <p class="font-bold text-lg text-brand-header">Inglés</p>
+                            <p class="font-medium ${levels.ing.color}">${levels.ing.text}</p>
+                        </div>
+                        <div class="text-3xl font-bold ml-auto">${report.ing_score}<span class="text-xl text-gray-400">/100</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sección de Acordeones (Detalles) -->
+        <div class="bg-brand-surface p-6 rounded-2xl shadow-lg mt-6">
+            <h3 class="text-2xl font-bold text-brand-header mb-4">Análisis Detallado</h3>
+            <!-- Pestañas (Simulacro vs Minisimulacro) -->
+            ${tabsHTML}
+            <!-- Contenido de las Pestañas -->
+            ${tabsContentHTML}
+        </div>
+    `;
+}
 
 /**
- * Maneja el clic en el botón "Analizar" del panel de estadísticas.
+ * Genera la tabla HTML para el feedback de preguntas de una sesión.
  */
-async function handleStatsAnalysis() {
-    const testId = document.getElementById('stats-test-select').value;
+function generateFeedbackTable(keys, answers) {
+    if (!keys || !answers) return '<p class="text-gray-600">No hay datos de feedback disponibles para esta sesión.</p>';
+
+    let tableHTML = `
+        <div class="overflow-x-auto">
+            <table class="w-full feedback-table">
+                <thead>
+                    <tr>
+                        <th>Pregunta</th>
+                        <th>Tu Respuesta</th>
+                        <th>Respuesta Correcta</th>
+                        <th>Resultado</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    for (const questionName in keys) {
+        if (questionName.toLowerCase() === 'id' || questionName.toLowerCase() === 'email' || questionName.toLowerCase() === 'nombre') {
+            continue;
+        }
+
+        const correctAnswer = keys[questionName]?.trim() || 'N/A';
+        const userAnswer = answers[questionName]?.trim() || 'Omitida';
+        
+        const isCorrect = userAnswer === correctAnswer;
+        
+        tableHTML += `
+            <tr>
+                <td class="font-medium text-brand-header">${questionName}</td>
+                <td class="${isCorrect ? 'text-muted' : 'highlight-incorrect'}">${userAnswer}</td>
+                <td class="highlight-correct">${correctAnswer}</td>
+                <td>
+                    ${isCorrect 
+                        ? '<i data-lucide="check-circle-2" class="icon-correct"></i>' 
+                        : '<i data-lucide="x-circle" class="icon-incorrect"></i>'}
+                </td>
+            </tr>
+        `;
+    }
+
+    tableHTML += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    return tableHTML;
+}
+
+/**
+ * Genera el HTML para los enlaces de video.
+ */
+function generateVideoLinksHTML(videoLinks) {
+    if (!videoLinks || videoLinks.length === 0) {
+        return '<p class="text-gray-600">No hay videos de retroalimentación disponibles para esta prueba.</p>';
+    }
+
+    let html = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">';
+    
+    videoLinks.forEach(link => {
+        // (v5.1) Usar imagen de placeholder si no se define una
+        const placeholderImg = `https://placehold.co/600x400/3B82F6/FFFFFF?text=${encodeURIComponent(link.subject)}`;
+        const imgSrc = link.img || placeholderImg;
+
+        html += `
+            <a href="${link.url}" target="_blank" rel="noopener noreferrer" class="video-card-link">
+                <div class="video-card-thumbnail">
+                    <img src="${imgSrc}" alt="Miniatura de ${link.subject}" class="w-full h-full object-cover">
+                </div>
+                <div class="p-4">
+                    <h4 class="font-bold text-brand-header">${link.subject}</h4>
+                    <p class="text-sm text-gray-500">${link.range}</p>
+                </div>
+            </a>
+        `;
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+/**
+ * (v5.1) Añade listeners a los acordeones y pestañas
+ */
+function setupAccordionListeners() {
+    // Listeners para Pestañas
+    const tabContainer = document.querySelector('.dashboard-panel.active');
+    if (!tabContainer) return;
+
+    const tabButtons = tabContainer.querySelectorAll('.tab-btn');
+    const tabContents = tabContainer.querySelectorAll('.tab-content');
+
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const tabId = button.dataset.tab;
+
+            // Ocultar todo
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabContents.forEach(content => content.classList.remove('active'));
+
+            // Mostrar seleccionado
+            button.classList.add('active');
+            const activeContent = tabContainer.querySelector(`#tab-content-${tabId}`);
+            if (activeContent) {
+                activeContent.classList.add('active');
+            }
+        });
+    });
+}
+
+
+// --- 6. LÓGICA DEL DASHBOARD DE ADMINISTRADOR ---
+
+/**
+ * (v6) Muestra el panel principal del dashboard de admin.
+ */
+function showAdminDashboard() {
+    showPanel('admin-dashboard-section', 'nav-admin-dashboard');
+    
+    // (v5) Calcular y mostrar KPIs
+    calculateAndShowAdminKPIs();
+    
+    // (v5) Renderizar gráficos (si no existen)
+    if (!window.myAdminBarChart) {
+        renderAdminBarChart();
+    }
+    if (!window.myAdminDoughnutChart) {
+        renderAdminDoughnutChart();
+    }
+}
+
+/**
+ * (v6) Muestra el panel de gestión de estudiantes.
+ */
+function showAdminStudentsPanel() {
+    showPanel('admin-students-section', 'nav-admin-students');
+    
+    // Poblar el selector de análisis (si existe)
+    populateStatsTestSelect();
+
+    // Resetear y renderizar la tabla
+    currentAdminPage = 1;
+    currentAdminSort = { column: 'Nombre Completo del Estudiante', direction: 'asc' };
+    document.getElementById('admin-search-input').value = '';
+    renderAdminTable();
+}
+
+/**
+ * (v6) Muestra el panel de análisis estadístico.
+ */
+function showAdminStatsPanel() {
+    showPanel('admin-stats-section', 'nav-admin-stats');
+    
+    // Poblar el selector de análisis
+    populateStatsTestSelect();
+    
+    // Limpiar resultados anteriores
+    document.getElementById('stats-results-container').style.display = 'none';
+    document.getElementById('stats-results-cards-grid').innerHTML = '';
+}
+
+/**
+ * (v6) Muestra el panel de CRUD.
+ */
+function showAdminCrudPanel() {
+    showPanel('admin-crud-section', 'nav-admin-crud');
+    
+    // Limpiar formulario y estado
+    document.getElementById('add-student-form').reset();
+    const statusEl = document.getElementById('crud-status');
+    statusEl.style.display = 'none';
+    statusEl.textContent = '';
+}
+
+/**
+ * (v5) Calcula y muestra las tarjetas de KPI del admin.
+ */
+function calculateAndShowAdminKPIs() {
+    // KPI 1: Total Estudiantes
+    const totalStudents = ALL_STUDENTS_ARRAY.length;
+    document.getElementById('admin-kpi-students').textContent = totalStudents;
+    
+    // KPI 2: Total Pruebas
+    const totalTests = Object.keys(TEST_INDEX).length;
+    document.getElementById('admin-kpi-tests').textContent = totalTests;
+    
+    // KPIs 3 y 4: Promedios
+    let simCount = 0, simTotal = 0;
+    let miniCount = 0, miniTotal = 0;
+
+    SCORES_DB.forEach(score => {
+        const testType = TEST_INDEX[score.test_id]?.type;
+        const globalScore = parseInt(score.global_score, 10);
+        if (testType === 'simulacro') {
+            simTotal += globalScore;
+            simCount++;
+        } else if (testType === 'minisimulacro') {
+            miniTotal += globalScore;
+            miniCount++;
+        }
+    });
+
+    const avgSim = simCount > 0 ? (simTotal / simCount).toFixed(0) : 'N/A';
+    const avgMini = miniCount > 0 ? (miniTotal / miniCount).toFixed(0) : 'N/A';
+
+    document.getElementById('admin-kpi-avg-sim').textContent = avgSim;
+    document.getElementById('admin-kpi-avg-mini').textContent = avgMini;
+}
+
+/**
+ * (v5) Renderiza el gráfico de barras (promedio por materia) del admin.
+ */
+function renderAdminBarChart() {
+    const ctx = document.getElementById('adminBarChart')?.getContext('2d');
+    if (!ctx) return;
+
+    // Calcular promedios
+    let totals = { mat: 0, lec: 0, soc: 0, cie: 0, ing: 0 };
+    const count = SCORES_DB.length;
+    
+    if (count === 0) return;
+
+    SCORES_DB.forEach(score => {
+        totals.mat += parseInt(score.mat_score, 10);
+        totals.lec += parseInt(score.lec_score, 10);
+        totals.soc += parseInt(score.soc_score, 10);
+        totals.cie += parseInt(score.cie_score, 10);
+        totals.ing += parseInt(score.ing_score, 10);
+    });
+
+    const avgs = [
+        (totals.mat / count).toFixed(0),
+        (totals.lec / count).toFixed(0),
+        (totals.soc / count).toFixed(0),
+        (totals.cie / count).toFixed(0),
+        (totals.ing / count).toFixed(0)
+    ];
+
+    window.myAdminBarChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Mat', 'Lec', 'Soc', 'Cie', 'Ing'],
+            datasets: [{
+                label: 'Promedio General (0-100)',
+                data: avgs,
+                backgroundColor: [
+                    'var(--color-matematicas)',
+                    'var(--color-lectura)',
+                    'var(--color-sociales)',
+                    'var(--color-ciencias)',
+                    'var(--color-ingles)'
+                ],
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    grid: { color: '#e5e7eb' }
+                },
+                x: {
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+}
+
+/**
+ * (v5) Renderiza el gráfico de dona (distribución de puntajes) del admin.
+ */
+function renderAdminDoughnutChart() {
+    const ctx = document.getElementById('adminDoughnutChart')?.getContext('2d');
+    if (!ctx) return;
+
+    let ranges = {
+        '0-200': 0,
+        '201-250': 0,
+        '251-300': 0,
+        '301-350': 0,
+        '351-400': 0,
+        '401-500': 0
+    };
+
+    SCORES_DB.forEach(score => {
+        const s = parseInt(score.global_score, 10);
+        if (s <= 200) ranges['0-200']++;
+        else if (s <= 250) ranges['201-250']++;
+        else if (s <= 300) ranges['251-300']++;
+        else if (s <= 350) ranges['301-350']++;
+        else if (s <= 400) ranges['351-400']++;
+        else ranges['401-500']++;
+    });
+
+    window.myAdminDoughnutChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(ranges),
+            datasets: [{
+                label: '# de Estudiantes',
+                data: Object.values(ranges),
+                backgroundColor: [
+                    '#ef4444', // red-500
+                    '#f97316', // orange-500
+                    '#eab308', // yellow-500
+                    '#84cc16', // lime-500
+                    '#22c55e', // green-500
+                    '#14b8a6', // teal-500
+                ],
+                borderColor: 'var(--brand-surface)',
+                borderWidth: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right',
+                }
+            }
+        }
+    });
+}
+
+/**
+ * Renderiza la tabla de estudiantes del admin, aplicando filtros, orden y paginación.
+ */
+function renderAdminTable() {
+    const tableBody = document.getElementById('admin-table-body');
+    const paginationControls = document.getElementById('admin-pagination-controls');
+    if (!tableBody || !paginationControls) return;
+
+    // 1. Filtrar
+    const searchTerm = document.getElementById('admin-search-input').value.toLowerCase();
+    const filteredStudents = ALL_STUDENTS_ARRAY.filter(student => 
+        student['Nombre Completo del Estudiante'].toLowerCase().includes(searchTerm) ||
+        student['Número de Documento'].toLowerCase().includes(searchTerm)
+    );
+
+    // 2. Ordenar
+    const sortKey = currentAdminSort.column;
+    const sortDir = currentAdminSort.direction;
+    filteredStudents.sort((a, b) => {
+        let valA = a[sortKey] || '';
+        let valB = b[sortKey] || '';
+        
+        // (v5.1) Asegurar que la comparación sea numérica si es documento
+        if (sortKey === 'Número de Documento') {
+            valA = parseInt(valA, 10) || 0;
+            valB = parseInt(valB, 10) || 0;
+            return sortDir === 'asc' ? valA - valB : valB - valA;
+        } else {
+            valA = valA.toString().toLowerCase();
+            valB = valB.toString().toLowerCase();
+            return sortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        }
+    });
+    
+    // (v5.1) Actualizar iconos de ordenamiento en cabecera
+    document.querySelectorAll('#admin-students-section .table-header').forEach(th => {
+        th.classList.remove('sorted');
+        th.querySelector('.sort-icon')?.remove();
+        if (th.dataset.sort === sortKey) {
+            th.classList.add('sorted');
+            const icon = sortDir === 'asc' ? 'chevron-up' : 'chevron-down';
+            th.innerHTML += ` <i data-lucide="${icon}" class="sort-icon h-4 w-4"></i>`;
+        }
+    });
+
+    // 3. Paginar
+    const totalPages = Math.ceil(filteredStudents.length / ADMIN_ROWS_PER_PAGE);
+    const startIndex = (currentAdminPage - 1) * ADMIN_ROWS_PER_PAGE;
+    const endIndex = startIndex + ADMIN_ROWS_PER_PAGE;
+    const paginatedStudents = filteredStudents.slice(startIndex, endIndex);
+
+    // 4. Renderizar Tabla
+    tableBody.innerHTML = '';
+    if (paginatedStudents.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-gray-500 py-10">No se encontraron estudiantes.</td></tr>`;
+    } else {
+        paginatedStudents.forEach(student => {
+            const docNumber = student['Número de Documento'];
+            tableBody.innerHTML += `
+                <tr class="hover:bg-gray-50">
+                    <td class="table-cell font-medium text-brand-header">${student['Nombre Completo del Estudiante']}</td>
+                    <td class="table-cell text-gray-600">${docNumber}</td>
+                    <td class="table-cell text-gray-600">${student['Email']}</td>
+                    <td class="table-cell text-gray-600">${student['Colegio/institución']}</td>
+                    <td class="table-cell text-center">
+                        <button class="btn-icon view-student-history-btn" data-student-id="${docNumber}" title="Ver Historial de Informes">
+                            <i data-lucide="eye"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    // 5. Renderizar Paginación
+    renderAdminPagination(totalPages);
+    
+    // (v5.1) Actualizar iconos de Lucide
+    lucide.createIcons();
+}
+
+/**
+ * Renderiza los controles de paginación para la tabla de admin.
+ */
+function renderAdminPagination(totalPages) {
+    const controls = document.getElementById('admin-pagination-controls');
+    controls.innerHTML = '';
+    if (totalPages <= 1) return;
+
+    // Botón "Anterior"
+    controls.innerHTML += `
+        <button class="pagination-btn" data-page="${currentAdminPage - 1}" ${currentAdminPage === 1 ? 'disabled' : ''}>
+            <i data-lucide="chevron-left" class="h-5 w-5"></i>
+        </button>
+    `;
+
+    // (v5.1) Lógica de "..." para paginación
+    const pagesToShow = [];
+    if (totalPages <= 7) {
+        for (let i = 1; i <= totalPages; i++) pagesToShow.push(i);
+    } else {
+        pagesToShow.push(1);
+        if (currentAdminPage > 3) pagesToShow.push('...');
+        
+        let start = Math.max(2, currentAdminPage - 1);
+        let end = Math.min(totalPages - 1, currentAdminPage + 1);
+
+        if (currentAdminPage <= 3) end = 3;
+        if (currentAdminPage >= totalPages - 2) start = totalPages - 2;
+
+        for (let i = start; i <= end; i++) pagesToShow.push(i);
+        
+        if (currentAdminPage < totalPages - 2) pagesToShow.push('...');
+        pagesToShow.push(totalPages);
+    }
+
+    // Botones de Página
+    pagesToShow.forEach(page => {
+        if (page === '...') {
+            controls.innerHTML += `<span class="pagination-btn" disabled>...</span>`;
+        } else {
+            controls.innerHTML += `
+                <button class="pagination-btn ${page === currentAdminPage ? 'active' : ''}" data-page="${page}">
+                    ${page}
+                </button>
+            `;
+        }
+    });
+
+    // Botón "Siguiente"
+    controls.innerHTML += `
+        <button class="pagination-btn" data-page="${currentAdminPage + 1}" ${currentAdminPage === totalPages ? 'disabled' : ''}>
+            <i data-lucide="chevron-right" class="h-5 w-5"></i>
+        </button>
+    `;
+    
+    lucide.createIcons();
+}
+
+/**
+ * Muestra el historial de informes de un estudiante en un modal (para Admin).
+ */
+function showAdminStudentHistory(studentDocNumber) {
+    const student = STUDENT_DB[studentDocNumber];
+    if (!student) return;
+
+    const modalBackdrop = document.getElementById('admin-modal-backdrop');
+    const modalHeader = document.getElementById('admin-modal-header');
+    const modalBody = document.getElementById('admin-modal-body');
+
+    modalHeader.textContent = `Historial de: ${student['Nombre Completo del Estudiante']}`;
+    modalBody.innerHTML = ''; // Limpiar
+
+    const studentReports = SCORES_DB.filter(score => score.doc_number === studentDocNumber)
+                                 .sort((a, b) => new Date(b.test_date) - new Date(a.test_date));
+
+    if (studentReports.length === 0) {
+        modalBody.innerHTML = '<p class="text-gray-600 text-center py-5">Este estudiante no tiene informes registrados.</p>';
+    } else {
+        let gridHTML = '<div class="grid grid-cols-1 md:grid-cols-2 gap-5">';
+        studentReports.forEach(report => {
+            const testInfo = TEST_INDEX[report.test_id];
+            if (!testInfo) return;
+            
+            // (v5.1) Usar 'report-card' pero con data-doc-number
+            gridHTML += `
+                <div class="report-card cursor-pointer" data-testid="${report.test_id}" data-doc-number="${studentDocNumber}">
+                    <h3 class="text-lg font-bold text-brand-header">${testInfo.name}</h3>
+                    <p class="text-sm text-gray-500 mb-3">Realizado el: ${new Date(report.test_date).toLocaleDateString('es-CO')}</p>
+                    <p class_alias="text-sm font-medium text-gray-600">Puntaje Global</p>
+                    <p class="text-3xl font-bold text-brand-secondary">${report.global_score}</p>
+                    <span class_alias="text-xs text-gray-500">Haz clic para ver el informe detallado</span>
+                </div>
+            `;
+        });
+        gridHTML += '</div>';
+        modalBody.innerHTML = gridHTML;
+    }
+
+    openModal(modalBackdrop);
+}
+
+
+// --- 7. LÓGICA DE ANÁLISIS ESTADÍSTICO (MEJORA 1) ---
+
+/**
+ * (v5.1) Pobla el selector de pruebas en el panel de análisis.
+ */
+function populateStatsTestSelect() {
+    const statsTestSelect = document.getElementById('stats-test-select');
+    if (statsTestSelect && statsTestSelect.options.length <= 1) {
+        statsTestSelect.innerHTML = '<option value="">Seleccione una prueba...</option>';
+        for (const testId in TEST_INDEX) {
+            const testName = TEST_INDEX[testId].name;
+            statsTestSelect.innerHTML += `<option value="${testId}">${testName}</option>`;
+        }
+    }
+}
+
+/**
+ * (v5.1) Manejador para el botón "Analizar".
+ */
+async function handleAnalyzeTest() {
+    const statsTestSelectEl = document.getElementById('stats-test-select');
+    const statsLoadingEl = document.getElementById('stats-loading');
+    const statsResultsContainerEl = document.getElementById('stats-results-container');
+    const statsResultsTitleEl = document.getElementById('stats-results-title');
+    const statsResultsCardsGridEl = document.getElementById('stats-results-cards-grid');
+
+    const testId = statsTestSelectEl.value;
     if (!testId) {
-        alert('Por favor, seleccione una prueba.');
+        alert('Por favor, seleccione una prueba para analizar.');
         return;
     }
 
-    const loadingEl = document.getElementById('stats-loading');
-    const resultsContainerEl = document.getElementById('stats-results-container');
-    const resultsTitleEl = document.getElementById('stats-results-title');
-    const filterSelect = document.getElementById('stats-filter-by');
-
-    loadingEl.style.display = 'block';
-    resultsContainerEl.style.display = 'none';
-    filterSelect.innerHTML = '<option value="all">Todas las Áreas</option>'; // Resetear filtros
+    // Mostrar spinner y ocultar resultados anteriores
+    statsLoadingEl.style.display = 'block';
+    statsResultsContainerEl.style.display = 'none';
+    statsResultsCardsGridEl.innerHTML = '';
+    statsResultsTitleEl.textContent = `Resultados de Análisis: ${TEST_INDEX[testId].name}`;
 
     try {
         // 1. Analizar la prueba
         const analysisResults = await analyzeTestItems(testId);
-        resultsTitleEl.textContent = `Resultados de Análisis: ${TEST_INDEX[testId].name}`;
-        
-        // 2. Poblar filtros de área (NUEVO v5)
-        const areas = new Set(Object.values(analysisResults).map(item => item.area));
-        areas.forEach(area => {
-            if (area !== 'N/A') {
-                filterSelect.innerHTML += `<option value="${area}">${area}</option>`;
-            }
-        });
 
-        // 3. Guardar en caché para ordenar/filtrar
-        CACHED_TEST_DATA.currentStats = Object.values(analysisResults);
-        
-        // 4. Renderizar las tarjetas
-        renderStatsCards(CACHED_TEST_DATA.currentStats);
+        // 2. Renderizar los resultados
+        renderStatsCards(analysisResults);
 
     } catch (error) {
         console.error(`Error analizando la prueba ${testId}:`, error);
         alert(`Error al analizar la prueba. Revise la consola.`);
     } finally {
-        loadingEl.style.display = 'none';
-        resultsContainerEl.style.display = 'block';
+        // Ocultar spinner y mostrar tarjetas
+        statsLoadingEl.style.display = 'none';
+        statsResultsContainerEl.style.display = 'block';
+        lucide.createIcons(); // (v5) Actualizar iconos
     }
 }
 
 /**
- * Realiza el análisis estadístico de una prueba (Mejora 1).
- * Carga respuestas, claves, y procesa los datos.
- * @param {string} testId - El ID de la prueba (ej. "sg11_07" o "mini_1")
- * @returns {Object} - Un objeto con los resultados del análisis
+ * (v5.1) Realiza el análisis estadístico de una prueba.
+ * @param {string} testId
+ * @returns {Object}
  */
 async function analyzeTestItems(testId) {
     const testInfo = TEST_INDEX[testId];
     if (!testInfo) throw new Error(`No se encontró información para la prueba ${testId}`);
 
-    // stats = { "Matemáticas [1.]": { ... }, ... }
     const stats = {};
+    const keysMap = {}; 
     const isSimulacro = testInfo.type === 'simulacro';
+    
+    const keysFiles = isSimulacro ? [testInfo.keys_s1, testInfo.keys_s2] : [testInfo.keys];
+    const answersFiles = isSimulacro ? [testInfo.answers_s1, testInfo.answers_s2] : [testInfo.answers];
 
-    // --- 1. Cargar Claves y Respuestas (usando la función de caché) ---
-    // (loadTestData cargará los datos si no están en caché)
-    await loadTestData(testId, ''); // Cargar datos globales de la prueba
-
-    const cachedTest = CACHED_TEST_DATA[testId];
-    const keysData = isSimulacro ? { ...cachedTest.keys.s1, ...cachedTest.keys.s2 } : cachedTest.keys;
-    const answersData = isSimulacro ? { ...cachedTest.answers.s1, ...cachedTest.answers.s2 } : cachedTest.answers;
-
-    // --- 2. Inicializar el objeto de Estadísticas ---
-    for (const questionHeader in keysData) {
-        if (!keysData.hasOwnProperty(questionHeader)) continue;
-        // (NUEVO v5) Extraer área
-        const areaMatch = questionHeader.match(/^([a-zA-Záéíóúñ\s]+)/);
-        const area = areaMatch ? areaMatch[1].trim() : 'N/A';
+    // --- 1. Cargar y mapear claves ---
+    for (const keysPath of keysFiles) {
+        if (!keysPath) continue;
+        const keysData = await fetchAndParseCSV(`${BASE_DATA_URL}${keysPath}`);
         
-        stats[questionHeader] = {
-            pregunta: questionHeader,
-            area: area,
-            correcta: keysData[questionHeader],
-            A: 0, B: 0, C: 0, D: 0, Omision: 0,
-            total: 0,
-            correctas: 0
-        };
+        const keysHeaders = Object.keys(keysData[0]);
+        const keysValues = keysData[0];
+        
+        for(const header of keysHeaders) {
+            if (header.toLowerCase() === 'id' || header.toLowerCase() === 'email' || header.toLowerCase() === 'nombre') continue;
+            
+            const cleanHeader = header.trim();
+            const cleanKey = keysValues[header]?.trim() || 'N/A';
+            
+            keysMap[cleanHeader] = cleanKey;
+            stats[cleanHeader] = {
+                pregunta: cleanHeader,
+                correcta: cleanKey,
+                A: 0, B: 0, C: 0, D: 0, Omision: 0,
+                total: 0,
+                correctas: 0
+            };
+        }
     }
 
-    // --- 3. Procesar Respuestas de TODOS los estudiantes ---
-    // (answersData es { doc1: { ... }, doc2: { ... } })
-    for (const docNumber in answersData) {
-        const studentRow = answersData[docNumber];
-        
-        for (const questionHeader in stats) {
-            if (studentRow.hasOwnProperty(questionHeader)) {
-                const studentAnswer = studentRow[questionHeader]?.trim().toUpperCase() || 'OMISION';
-                const correctAnswer = stats[questionHeader].correcta;
-                
-                const statsEntry = stats[questionHeader];
-                statsEntry.total++;
+    // --- 2. Procesar Respuestas de TODOS los estudiantes ---
+    for (const answersPath of answersFiles) {
+        if (!answersPath) continue;
+        const answersData = await fetchAndParseCSV(`${BASE_DATA_URL}${answersPath}`);
 
-                // Conteo de distractores
-                if (studentAnswer === 'A') statsEntry.A++;
-                else if (studentAnswer === 'B') statsEntry.B++;
-                else if (studentAnswer === 'C') statsEntry.C++;
-                else if (studentAnswer === 'D') statsEntry.D++;
-                else statsEntry.Omision++;
-                
-                // Conteo de aciertos
-                if (studentAnswer === correctAnswer) {
-                    statsEntry.correctas++;
+        for (const studentRow of answersData) {
+            for (const questionHeader in keysMap) {
+                if (studentRow.hasOwnProperty(questionHeader)) {
+                    
+                    const studentAnswer = (studentRow[questionHeader] || 'OMISION').trim().toUpperCase();
+                    const correctAnswer = keysMap[questionHeader];
+                    const statsEntry = stats[questionHeader];
+                    
+                    if (!statsEntry) continue; // Seguridad
+
+                    statsEntry.total++;
+
+                    // Conteo de distractores
+                    if (studentAnswer === 'A') statsEntry.A++;
+                    else if (studentAnswer === 'B') statsEntry.B++;
+                    else if (studentAnswer === 'C') statsEntry.C++;
+                    else if (studentAnswer === 'D') statsEntry.D++;
+                    else statsEntry.Omision++;
+                    
+                    // Conteo de aciertos
+                    if (studentAnswer === correctAnswer) {
+                        statsEntry.correctas++;
+                    }
                 }
             }
         }
@@ -1399,158 +1633,110 @@ async function analyzeTestItems(testId) {
 }
 
 /**
- * Renderiza los resultados del análisis en TARJETAS VISUALES (NUEVO v5).
- * @param {Array} statsArray - Array de objetos de estadísticas (de CACHED_TEST_DATA.currentStats).
- * @param {string} [sortBy='default'] - Criterio de orden.
+ * (v5.1) Renderiza los resultados del análisis en TARJETAS (diseño mejorado).
+ * @param {Object} stats
  */
-function renderStatsCards(statsArray, sortBy = 'default') {
-    const gridContainer = document.getElementById('stats-results-grid');
-    gridContainer.innerHTML = '';
+function renderStatsCards(stats) {
+    const gridEl = document.getElementById('stats-results-cards-grid');
+    gridEl.innerHTML = '';
     
-    let sortedStats = [...statsArray];
+    // (v5.1) Ordenar por nombre de pregunta
+    const sortedQuestions = Object.keys(stats).sort((a, b) => {
+        // Extraer números para ordenar correctamente (ej. "Mat [1.]" vs "Mat [10.]")
+        const numA = parseInt(a.match(/\[(\d+)\.*\]/)?.[1] || 0, 10);
+        const numB = parseInt(b.match(/\[(\d+)\.*\]/)?.[1] || 0, 10);
+        return numA - numB;
+    });
 
-    // 1. Ordenar
-    if (sortBy === 'easiest') {
-        sortedStats.sort((a, b) => ((b.correctas / b.total) || 0) - ((a.correctas / a.total) || 0)); // Más fácil primero
-    } else if (sortBy === 'hardest') {
-        sortedStats.sort((a, b) => ((a.correctas / a.total) || 0) - ((b.correctas / b.total) || 0)); // Más difícil primero
-    } else if (sortBy === 'most-omitted') {
-        sortedStats.sort((a, b) => ((b.Omision / b.total) || 0) - ((a.Omision / a.total) || 0)); // Más omitida primero
-    }
-    // 'default' es el orden original (por pregunta)
-
-    // 2. Renderizar
-    if (sortedStats.length === 0) {
-        gridContainer.innerHTML = '<p class="text-gray-500 col-span-full">No hay datos de preguntas para esta prueba.</p>';
-        return;
-    }
-
-    sortedStats.forEach(item => {
-        if (item.total === 0) return; // No mostrar preguntas sin respuestas
+    for (const pregunta of sortedQuestions) {
+        const item = stats[pregunta];
+        if (item.total === 0) continue;
 
         // Calcular porcentajes
-        const pctAcierto = (item.correctas / item.total) * 100;
-        const pctOmision = (item.Omision / item.total) * 100;
-        
-        // Encontrar el distractor principal (que no es la respuesta correcta)
-        const distractors = {
-            A: (item.A / item.total) * 100,
-            B: (item.B / item.total) * 100,
-            C: (item.C / item.total) * 100,
-            D: (item.D / item.total) * 100
-        };
-        let maxDistractorPct = 0;
-        let maxDistractorOpt = '';
-        for(const opt in distractors) {
-            if (opt !== item.correcta && distractors[opt] > maxDistractorPct) {
-                maxDistractorPct = distractors[opt];
-                maxDistractorOpt = opt;
-            }
-        }
+        const pctAcierto = ((item.correctas / item.total) * 100).toFixed(0);
+        const pctOmision = ((item.Omision / item.total) * 100).toFixed(0);
+        const pctA = ((item.A / item.total) * 100).toFixed(0);
+        const pctB = ((item.B / item.total) * 100).toFixed(0);
+        const pctC = ((item.C / item.total) * 100).toFixed(0);
+        const pctD = ((item.D / item.total) * 100).toFixed(0);
 
-        // Determinar dificultad (para el tag)
-        let dificultadClase = 'bg-yellow-100 text-yellow-800'; // Medio
+        // Dificultad
+        let dificultadClase = 'text-yellow-600';
         let dificultadTexto = 'Medio';
         if (pctAcierto >= 75) {
-            dificultadClase = 'bg-green-100 text-green-800'; // Fácil
+            dificultadClase = 'text-brand-green';
             dificultadTexto = 'Fácil';
         } else if (pctAcierto <= 35) {
-            dificultadClase = 'bg-red-100 text-red-800'; // Difícil
+            dificultadClase = 'text-brand-red';
             dificultadTexto = 'Difícil';
         }
+        
+        // Clases de resaltado
+        const classA = item.correcta === 'A' ? 'correct' : '';
+        const classB = item.correcta === 'B' ? 'correct' : '';
+        const classC = item.correcta === 'C' ? 'correct' : '';
+        const classD = item.correcta === 'D' ? 'correct' : '';
 
-        // Generar barras de distractores
-        let distractorHTML = '';
-        ['A', 'B', 'C', 'D'].forEach(opt => {
-            const pct = distractors[opt];
-            const isCorrect = opt === item.correcta;
-            const isMainDistractor = opt === maxDistractorOpt && maxDistractorPct > 0;
-            
-            let barColor = 'bg-gray-400';
-            let labelClass = '';
-            if (isCorrect) {
-                barColor = 'bg-brand-green';
-                labelClass = 'correct';
-            } else if (isMainDistractor && !isCorrect) {
-                barColor = 'bg-brand-red'; // Resaltar distractor principal
-            }
-            
-            distractorHTML += `
-                <div class="stat-distractor ${labelClass}">
-                    <div class="stat-distractor-label">
-                        <span>${opt}. (${pct.toFixed(0)}%)</span>
-                        ${isCorrect ? '<span>(Correcta)</span>' : ''}
-                    </div>
-                    <div class="stat-distractor-bar-container">
-                        <div class="stat-distractor-bar ${barColor}" style="width: ${pct.toFixed(0)}%;"></div>
-                    </div>
-                </div>
-            `;
-        });
-
-        // Crear tarjeta
         const cardHTML = `
-            <div class="stat-card" data-area="${item.area}">
-                <div class="stat-card-header">
-                    <span class="stat-card-title">${item.pregunta}</span>
-                    <span class="stat-card-tag ${dificultadClase}">${dificultadTexto} (${pctAcierto.toFixed(0)}%)</span>
+            <div class="stats-card">
+                <div class="flex justify-between items-center mb-3">
+                    <h4 class="text-lg font-bold text-brand-header">${item.pregunta}</h4>
+                    <span class="text-sm font-bold text-brand-green">Correcta: ${item.correcta}</span>
                 </div>
-                <div class="stat-card-body">
-                    ${distractorHTML}
-                </div>
-                <div class="stat-card-footer">
-                    <span>Omisión: ${pctOmision.toFixed(0)}%</span>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-baseline">
+                        <span class="text-sm font-medium text-gray-600">Acierto:</span>
+                        <span class="text-2xl font-bold ${dificultadClase}">${pctAcierto}%</span>
+                        <span class="text-sm font-medium text-gray-500">(${dificultadTexto})</span>
+                    </div>
+                     <div class="flex justify-between items-baseline">
+                        <span class="text-sm font-medium text-gray-600">Omisión:</span>
+                        <span class="text-2xl font-bold text-gray-700">${pctOmision}%</span>
+                    </div>
+                    
+                    <hr class="my-3">
+                    <h5 class="text-sm font-semibold text-gray-800">Distribución de Distractores:</h5>
+                    
+                    <div class="space-y-2">
+                        <div class="distractor-bar ${classA}">
+                            <span class="label">A: ${pctA}%</span>
+                            <div class="bar" style="width: ${pctA}%;"></div>
+                        </div>
+                        <div class="distractor-bar ${classB}">
+                            <span class="label">B: ${pctB}%</span>
+                            <div class="bar" style="width: ${pctB}%;"></div>
+                        </div>
+                        <div class="distractor-bar ${classC}">
+                            <span class="label">C: ${pctC}%</span>
+                            <div class="bar" style="width: ${pctC}%;"></div>
+                        </div>
+                        <div class="distractor-bar ${classD}">
+                            <span class="label">D: ${pctD}%</span>
+                            <div class="bar" style="width: ${pctD}%;"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         `;
-        gridContainer.innerHTML += cardHTML;
-    });
-}
-
-/**
- * Filtra las tarjetas de estadísticas visibles por área (NUEVO v5).
- * @param {string} area - El área a mostrar (ej. "Matemáticas" o "all").
- */
-function filterStatsCards(area) {
-    const cards = document.querySelectorAll('#stats-results-grid .stat-card');
-    let visibleCards = 0;
-    
-    cards.forEach(card => {
-        if (area === 'all' || card.dataset.area === area) {
-            card.style.display = 'block';
-            visibleCards++;
-        } else {
-            card.style.display = 'none';
-        }
-    });
-
-    // Mostrar mensaje si no hay resultados
-    const noResultsEl = document.getElementById('stats-no-results');
-    if (visibleCards === 0) {
-        noResultsEl.style.display = 'block';
-    } else {
-        noResultsEl.style.display = 'none';
+        gridEl.innerHTML += cardHTML;
     }
 }
 
 
-// --- 8. GESTIÓN DE CONTENIDO (Admin CRUD - Mejora 3) ---
-
-// Variable global para almacenar el callback post-token
-let afterTokenSuccess = null;
+// --- 8. LÓGICA DEL CRUD (MEJORA 3) ---
 
 /**
- * Maneja el envío del formulario "Añadir Estudiante".
- * Inicia el flujo de caché y solicitud de token.
- * @param {Event} e - El evento de submit.
+ * (v5.1) Maneja el envío del formulario de "Añadir Estudiante".
+ * Guarda en caché local y abre el modal del token.
  */
 async function handleAddStudentSubmit(e) {
     e.preventDefault();
-    const statusEl = document.getElementById('crud-student-status');
+    const statusEl = document.getElementById('crud-status');
     const buttonEl = document.getElementById('add-student-btn');
-
+    
     buttonEl.disabled = true;
-    statusEl.textContent = 'Procesando...';
+    statusEl.textContent = 'Validando...';
+    statusEl.style.display = 'inline';
     statusEl.style.color = 'var(--brand-text)';
 
     try {
@@ -1561,108 +1747,61 @@ async function handleAddStudentSubmit(e) {
             'Tipo de Documento': document.getElementById('student-doc-type').value,
             'Número de Documento': document.getElementById('student-doc-number').value.trim(),
             'Fecha de Nacimiento': document.getElementById('student-birthdate').value.trim(),
-            'Departamento': '', // Campo no existente en el form v5
+            'Departamento': document.getElementById('student-department').value.trim(),
             'Colegio/institución': document.getElementById('student-school').value.trim(),
         };
 
-        // 2. Validar que el estudiante no exista
-        if (STUDENT_DB[newStudent['Número de Documento']]) {
-            throw new Error(`El estudiante con documento ${newStudent['Número de Documento']} ya existe.`);
+        // 2. Validar
+        if (!newStudent['Nombre Completo del Estudiante'] || !newStudent['Número de Documento'] || !newStudent['Fecha de Nacimiento']) {
+            throw new Error('Nombre, Documento y Fecha de Nacimiento son obligatorios.');
         }
 
-        // 3. Cargar el contenido actual del CSV si no está en caché
+        // 3. Cargar el CSV de estudiantes actual (si no está en caché)
         if (!crudCache.studentDb) {
-            statusEl.textContent = 'Cargando base de datos...';
-            // (CORREGIDO v5.1) Se debe pedir el token ANTES de leer
-            // si el repositorio es privado.
-            
-            // Paso 1: Pedir el token
-            afterTokenSuccess = async (token) => {
-                // Paso 2: Ahora que tenemos token, leer el archivo
-                statusEl.textContent = 'Cargando base de datos...';
-                const fileData = await getGitHubFile(GITHUB_API_CONFIG.studentDbPath, token);
-                crudCache.studentDb = atob(fileData.content);
-                crudCache.studentDbSha = fileData.sha;
-                
-                // Paso 3: Proceder con la adición
-                await processNewStudent(newStudent, token, statusEl);
-            };
-            
-            openModal(document.getElementById('github-token-modal'));
-            document.getElementById('token-modal-error').style.display = 'none';
-            // El resto de la lógica se mueve a 'handleConfirmGithubToken' y 'processNewStudent'
-            
-        } else {
-            // El caché ya existe, solo pedir token para escribir
-            afterTokenSuccess = async (token) => {
-                 await processNewStudent(newStudent, token, statusEl);
-            };
-            openModal(document.getElementById('github-token-modal'));
-            document.getElementById('token-modal-error').style.display = 'none';
+            statusEl.textContent = 'Cargando base de datos actual...';
+            const fileData = await getGitHubFile(GITHUB_API_CONFIG.studentDbPath);
+            crudCache.studentDb = atob(fileData.content); // Decodificar Base64
+            crudCache.studentDbSha = fileData.sha;
         }
+
+        // 4. Convertir la nueva fila a CSV
+        // (v5.1) Usar PapaParse para generar la fila, asegurando comillas
+        const newCsvRow = Papa.unparse([newStudent], {
+            header: false, // No añadir cabecera
+            quotes: true  // Poner comillas a todo
+        });
+
+        // 5. Guardar en caché local
+        // (v5.1) Asegurarse de que haya un salto de línea
+        let newContent = crudCache.studentDb;
+        if (!newContent.endsWith('\n')) {
+            newContent += '\n';
+        }
+        newContent += newCsvRow;
         
+        localStorage.setItem('crud_pending_studentDb', newContent);
+        
+        // 6. Abrir modal para pedir token
+        statusEl.textContent = 'Datos validados.';
+        openModal(document.getElementById('github-token-modal'));
+
     } catch (error) {
-        console.error('Error al añadir estudiante:', error);
+        console.error('Error al preparar estudiante:', error);
         statusEl.textContent = `Error: ${error.message}`;
         statusEl.style.color = 'var(--brand-red)';
     } finally {
-         // (v5.1) El botón se reactiva en el modal o en el catch
-         // No reactivarlo aquí, sino en el 'finally' del modal
+        buttonEl.disabled = false;
     }
 }
 
 /**
- * (NUEVO v5.1) Procesa y guarda al nuevo estudiante
- * después de que el caché está listo y el token está disponible.
- */
-async function processNewStudent(newStudent, token, statusEl) {
-     // 1. Crear la nueva fila CSV
-    // (Asegurar el orden de columnas del CSV original)
-    const headers = Object.keys(ALL_STUDENTS_ARRAY[0]);
-    const newCsvRow = headers.map(header => `"${newStudent[header] || ''}"`).join(',');
-
-    // 2. Añadir al caché local
-    crudCache.studentDb += `\n${newCsvRow}`;
-    
-    // 3. Guardar en GitHub
-    statusEl.textContent = 'Guardando en GitHub...';
-    
-    // Codificar el nuevo contenido a Base64
-    const newContentBase64 = btoa(crudCache.studentDb);
-
-    // Hacer el commit a GitHub
-    const commitData = await updateGitHubFile(
-        GITHUB_API_CONFIG.studentDbPath,
-        token,
-        `CRUD: Añadido estudiante ${newStudent['Número de Documento']}`,
-        newContentBase64,
-        crudCache.studentDbSha
-    );
-
-    // 4. Actualizar el SHA en caché para el próximo commit
-    crudCache.studentDbSha = commitData.content.sha;
-
-    // 5. Éxito
-    statusEl.textContent = '¡Estudiante añadido con éxito!';
-    statusEl.style.color = 'var(--brand-green)';
-    document.getElementById('add-student-form').reset();
-
-    // 6. Actualizar la DB local de la app
-    STUDENT_DB[newStudent['Número de Documento']] = newStudent;
-    ALL_STUDENTS_ARRAY.push(newStudent);
-    renderAdminTable(); // Re-renderizar la tabla de admin
-}
-
-
-/**
- * Maneja la confirmación del modal de token.
- * Ejecuta el callback 'afterTokenSuccess' si existe.
+ * (v5.1) Maneja la confirmación del token y el guardado en GitHub.
  */
 async function handleConfirmGithubToken() {
-    const token = document.getElementById('github-token-input').value;
-    const errorEl = document.getElementById('token-modal-error');
+    const tokenInput = document.getElementById('github-token-input');
+    const token = tokenInput.value.trim();
+    const errorEl = document.getElementById('github-token-error');
     const confirmBtn = document.getElementById('confirm-token-btn');
-    const addStudentBtn = document.getElementById('add-student-btn');
 
     if (!token) {
         errorEl.textContent = 'El token no puede estar vacío.';
@@ -1670,74 +1809,92 @@ async function handleConfirmGithubToken() {
         return;
     }
 
-    if (typeof afterTokenSuccess === 'function') {
-        confirmBtn.disabled = true;
-        confirmBtn.textContent = 'Guardando...';
-        errorEl.style.display = 'none';
-        
-        try {
-            // Ejecutar la acción pendiente (ej. leer y guardar estudiante)
-            await afterTokenSuccess(token);
-            
-            // Éxito: limpiar token y cerrar modal
-            document.getElementById('github-token-input').value = '';
-            closeModal(document.getElementById('github-token-modal'));
-            
-        } catch (error) {
-            console.error('Error durante la acción (post-token):', error);
-            errorEl.textContent = `Error: ${error.message}. ¿Token válido?`;
-            errorEl.style.display = 'block';
-        } finally {
-            confirmBtn.disabled = false;
-            confirmBtn.textContent = 'Confirmar y Guardar';
-            addStudentBtn.disabled = false; // Reactivar el botón principal
-            afterTokenSuccess = null; // Limpiar callback
+    // Deshabilitar botón
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Guardando...';
+    errorEl.style.display = 'none';
+
+    try {
+        // 1. Obtener el contenido pendiente de localStorage
+        const newContent = localStorage.getItem('crud_pending_studentDb');
+        if (!newContent) {
+            throw new Error('No hay cambios pendientes para guardar.');
         }
+
+        // 2. Codificar a Base64
+        const newContentBase64 = btoa(unescape(encodeURIComponent(newContent))); // (v5.1) Seguro para UTF-8
+
+        // 3. Obtener el SHA (del caché)
+        const sha = crudCache.studentDbSha;
+        if (!sha) {
+            throw new Error('No se encontró el SHA del archivo. Intente recargar la página.');
+        }
+
+        // 4. Escribir (Hacer Commit) del nuevo archivo
+        const commitMessage = `Commit automático: Añadidos nuevos estudiantes desde la plataforma.`;
+        const { owner, repo, branch, studentDbPath } = GITHUB_API_CONFIG;
+        
+        await updateGitHubFile(studentDbPath, token, commitMessage, newContentBase64, sha, owner, repo, branch);
+
+        // 5. Éxito
+        closeModal(document.getElementById('github-token-modal'));
+        tokenInput.value = '';
+        localStorage.removeItem('crud_pending_studentDb');
+        
+        // Actualizar caché local para el próximo guardado
+        crudCache.studentDb = newContent;
+        // (v5.1) Es necesario recargar el SHA para el *próximo* commit
+        const newFileData = await getGitHubFile(studentDbPath, token);
+        crudCache.studentDbSha = newFileData.sha;
+        
+        // Actualizar UI
+        const statusEl = document.getElementById('crud-status');
+        statusEl.textContent = '¡Estudiante(s) guardado(s) con éxito!';
+        statusEl.style.color = 'var(--brand-green)';
+        document.getElementById('add-student-form').reset();
+        
+        // (v5.1) Recargar la base de datos de estudiantes en la app
+        processStudentData(Papa.parse(newContent, { header: true, skipEmptyLines: true }).data);
+        renderAdminTable(); // Refrescar la tabla
+
+    } catch (error) {
+        console.error('Error al guardar en GitHub:', error);
+        errorEl.textContent = `Error al guardar: ${error.message}`;
+        errorEl.style.display = 'block';
+    } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Confirmar y Guardar';
     }
 }
 
 /**
- * (Helper API) Obtiene el contenido y 'sha' de un archivo de GitHub.
- * (CORREGIDO v5.1: Requiere token para leer repos privados)
- * @param {string} filePath - Ruta al archivo en el repo (ej. "database/student_database.csv").
- * @param {string} token - El GitHub PAT.
- * @returns {Object} - { content, sha }
+ * (v5.1) Obtiene el contenido y 'sha' de un archivo de GitHub.
  */
-async function getGitHubFile(filePath, token) {
-    if (!token) {
-        throw new Error("Se requiere un token de GitHub para leer el archivo.");
-    }
-    
+async function getGitHubFile(filePath, token = null) {
     const { owner, repo, branch } = GITHUB_API_CONFIG;
     const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`;
+    
+    const headers = {
+        'Accept': 'application/vnd.github.v3+json',
+        'Cache-Control': 'no-cache', // Asegurar datos frescos
+        'Pragma': 'no-cache'
+    };
+    if (token) {
+        headers['Authorization'] = `token ${token}`;
+    }
 
-    const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-            'Authorization': `token ${token}`,
-            'Accept': 'application/vnd.github.v3+json',
-            'Cache-Control': 'no-cache', // Siempre obtener el más reciente
-            'Pragma': 'no-cache'
-        }
-    });
+    const response = await fetch(apiUrl, { method: 'GET', headers });
+    
     if (!response.ok) {
-        throw new Error(`Error [GET] al leer archivo de GitHub (${filePath}): ${response.statusText}`);
+        throw new Error(`Error al leer archivo [${filePath}] de GitHub: ${response.statusText}`);
     }
     return await response.json(); // Devuelve { content: '...', sha: '...' }
 }
 
-
 /**
- * (Helper API) Actualiza (hace commit) de un archivo en GitHub.
- * @param {string} filePath - Ruta al archivo en el repo.
- * @param {string} token - El GitHub PAT.
- *img/Matematicas (logo).svg * @param {string} commitMessage - Mensaje del commit.
- * @param {string} contentBase64 - Contenido del archivo en Base64.
- * @param {string} sha - El SHA del archivo que se está actualizando.
- * @returns {Object} - Datos del commit.
+ * (v5.1) Actualiza (hace commit) de un archivo en GitHub.
  */
-async function updateGitHubFile(filePath, token, commitMessage, contentBase64, sha) {
-    const { owner, repo, branch } = GITHUB_API_CONFIG;
+async function updateGitHubFile(filePath, token, commitMessage, contentBase64, sha, owner, repo, branch) {
     const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
 
     const response = await fetch(apiUrl, {
@@ -1750,13 +1907,14 @@ async function updateGitHubFile(filePath, token, commitMessage, contentBase64, s
         body: JSON.stringify({
             message: commitMessage,
             content: contentBase64,
-            sha: sha, // SHA del archivo base (obligatorio)
+            sha: sha,
             branch: branch
         })
     });
+    
     if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(`Error [PUT] al escribir en GitHub: ${errorData.message || response.statusText}`);
+        throw new Error(`Error al escribir archivo en GitHub: ${errorData.message || response.statusText}`);
     }
     return await response.json();
 }
@@ -1765,9 +1923,31 @@ async function updateGitHubFile(filePath, token, commitMessage, contentBase64, s
 // --- 9. FUNCIONES UTILITARIAS ---
 
 /**
- * Descarga y parsea un archivo CSV desde una URL.
+ * (v5.1) Abre un modal.
+ */
+function openModal(modalBackdrop) {
+    if (!modalBackdrop) return;
+    modalBackdrop.style.display = 'flex';
+    document.body.classList.add('modal-open');
+    // Pequeño delay para permitir la transición de opacidad
+    setTimeout(() => modalBackdrop.classList.add('is-open'), 10);
+}
+
+/**
+ * (v5.1) Cierra un modal.
+ */
+function closeModal(modalBackdrop) {
+    if (!modalBackdrop) return;
+    modalBackdrop.classList.remove('is-open');
+    document.body.classList.remove('modal-open');
+    // Esperar a que termine la transición antes de ocultarlo
+    setTimeout(() => modalBackdrop.style.display = 'none', 300); // 300ms (duración de la transición)
+}
+
+/**
+ * Carga y parsea un archivo CSV desde una URL.
  * @param {string} url - La URL del archivo CSV.
- * @returns {Promise<Array>} - Una promesa que se resuelve con los datos parseados.
+ * @returns {Promise<Array<Object>>} - Una promesa que resuelve a un array de objetos.
  */
 async function fetchAndParseCSV(url) {
     return new Promise((resolve, reject) => {
@@ -1776,34 +1956,120 @@ async function fetchAndParseCSV(url) {
             header: true,
             skipEmptyLines: true,
             complete: (results) => {
-                resolve(results.data);
+                if (results.data) {
+                    resolve(results.data);
+                } else {
+                    reject(new Error(`Error al parsear CSV de ${url}: ${results.errors.join(', ')}`));
+                }
             },
             error: (error) => {
-                console.error(`Error al parsear CSV desde ${url}:`, error);
-                reject(error);
+                reject(new Error(`Error al descargar CSV de ${url}: ${error.message}`));
             }
         });
     });
 }
 
 /**
+ * Carga los datos de una prueba (claves y respuestas del estudiante).
+ * Usa la caché si está disponible.
+ * @param {string} testId
+ * @param {string} studentDocNumber
+ * @returns {Promise<Object>} - { keys: {s1, s2}, answers: {s1, s2} }
+ */
+async function getTestAnswersAndKey(testId, studentDocNumber) {
+    const testInfo = TEST_INDEX[testId];
+    if (!testInfo) throw new Error("Índice de prueba no encontrado");
+
+    const cacheKey = `${testId}_${studentDocNumber}`;
+    if (CACHED_TEST_DATA[cacheKey]) {
+        return CACHED_TEST_DATA[cacheKey];
+    }
+
+    const isSimulacro = testInfo.type === 'simulacro';
+    let keys = {}, answers = {};
+
+    // Cargar Claves
+    if (isSimulacro) {
+        const [keysS1, keysS2] = await Promise.all([
+            fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.keys_s1}`),
+            fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.keys_s2}`)
+        ]);
+        keys = { s1: keysS1[0], s2: keysS2[0] };
+    } else {
+        const keysData = await fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.keys}`);
+        keys = keysData[0];
+    }
+
+    // Cargar Respuestas del Estudiante
+    if (isSimulacro) {
+        const [answersS1, answersS2] = await Promise.all([
+            fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.answers_s1}`),
+            fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.answers_s2}`)
+        ]);
+        answers = {
+            s1: answersS1.find(row => row.ID.trim() === studentDocNumber),
+            s2: answersS2.find(row => row.ID.trim() === studentDocNumber)
+        };
+    } else {
+        const answersData = await fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.answers}`);
+        answers = answersData.find(row => row.ID.trim() === studentDocNumber);
+    }
+    
+    if (!answers || (!isSimulacro && !answers) || (isSimulacro && (!answers.s1 || !answers.s2))) {
+        console.warn(`No se encontraron las respuestas del estudiante ${studentDocNumber} para la prueba ${testId}.`);
+        // Continuar de todas formas para mostrar al menos las claves
+    }
+
+    const result = { keys, answers };
+    CACHED_TEST_DATA[cacheKey] = result; // Guardar en caché
+    return result;
+}
+
+/**
+ * Carga y parsea el archivo de videos de retroalimentación.
+ * @param {string} testId
+ * @returns {Promise<Array<Object>>}
+ */
+async function getTestVideoLinks(testId) {
+    const videoPath = TEST_INDEX[testId]?.videos;
+    if (!videoPath) return [];
+
+    const cacheKey = `videos_${testId}`;
+    if (CACHED_TEST_DATA[cacheKey]) {
+        return CACHED_TEST_DATA[cacheKey];
+    }
+
+    try {
+        const response = await fetch(`${BASE_DATA_URL}${videoPath}?t=${TIMESTAMP}`);
+        if (!response.ok) throw new Error("Archivo de video no encontrado.");
+        
+        const text = await response.text();
+        const links = parseVideoText(text);
+        
+        CACHED_TEST_DATA[cacheKey] = links; // Guardar en caché
+        return links;
+    } catch (error) {
+        console.error("Error cargando videos:", error);
+        return [];
+    }
+}
+
+/**
  * Parsea el texto de retroalimentación de video.
  * @param {string} text - El contenido del archivo bd_retro_...txt.
- * @returns {Array<Object>} - Un array de objetos de video.
+ * @returns {Array<Object>}
  */
 function parseVideoText(text) {
     const links = [];
     const lines = text.split('\n');
     lines.forEach(line => {
-        // Formato esperado: MATERIA;RANGO;URL;[TÍTULO OPCIONAL];[IMG OPCIONAL]
         const parts = line.split(';');
         if (parts.length >= 3) {
             links.push({
                 subject: parts[0].trim(),
                 range: parts[1].trim(),
                 url: parts[2].trim(),
-                title: parts[3]?.trim() || `Retroalimentación: ${parts[0]} (Preguntas ${parts[1]})`,
-                img: parts[4]?.trim() || null
+                img: parts[3]?.trim() || null
             });
         }
     });
