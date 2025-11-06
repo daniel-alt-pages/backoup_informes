@@ -37,176 +37,20 @@ body {
 /* Estilos de Formularios */
 .form-input {
     width: 100%;
-    padding: 0.75rem 1rem;
-    border: 1px solid var(--brand-border);
-    border-radius: 0.5rem; /* Esquinas más redondeadas */
-    background-color: var(--brand-surface);
-    transition: all 0.2s ease;
+/* ... existing code ... -->
     font-size: 1rem;
 }
 .form-input:focus {
-    outline: none;
-    border-color: var(--brand-secondary);
+/* ... existing code ... -->
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+/* (NUEVO) Asegurar que el input de contraseña tenga padding
+   (aunque se añadió 'pr-10' en el HTML, esto es un fallback) */
+#password {
+    padding-right: 3rem; 
 }
 
 /* Estilos de la tabla de administrador */
 .admin-table-header {
-    padding: 0.75rem 1.5rem;
-    text-align: left;
-    font-size: 0.75rem;
-    font-weight: 600; /* Semi-bold */
-    color: var(--brand-header);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    cursor: pointer;
-    user-select: none;
-}
-.admin-table-header:hover {
-    background-color: #f9fafb; /* gray-50 */
-}
-.pagination-btn {
-    padding: 0.5rem 1rem;
-    border: 1px solid var(--brand-border);
-    border-radius: 0.375rem; /* rounded-md */
-    background-color: var(--brand-surface);
-    color: var(--brand-text);
-    font-weight: 500;
-    transition: all 0.2s ease;
-}
-.pagination-btn:hover:not(:disabled) {
-    background-color: #f3f4f6; /* gray-100 */
-}
-.pagination-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-/* Estilos de Modal (para admin) */
-.modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
-    display: none; /* Oculto por defecto */
-    align-items: center;
-    justify-content: center;
-    z-index: 50;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-.modal-container {
-    background-color: var(--brand-bg);
-    border-radius: 0.75rem; /* rounded-xl */
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-    width: 90%;
-    max-height: 90vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    transform: scale(0.95);
-    transition: all 0.3s ease;
-}
-.modal-header-container {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem;
-    border-bottom: 1px solid var(--brand-border);
-    background-color: var(--brand-surface);
-}
-.modal-header {
-    font-size: 1.25rem; /* text-xl */
-    font-weight: 600;
-    color: var(--brand-header);
-}
-.modal-close-btn {
-    color: #9ca3af; /* gray-400 */
-    padding: 0.5rem;
-    border-radius: 99px;
-    background-color: transparent;
-    transition: all 0.2s ease;
-}
-.modal-close-btn:hover {
-    background-color: #f3f4f6; /* gray-100 */
-    color: var(--brand-header);
-}
-.modal-body {
-    padding: 1.5rem;
-    overflow-y: auto;
-}
-
-/* ====================================================== */
-/* INICIO: MEJORA 3 - Estilos para Modal de Token (Nuevo)  */
-/* ====================================================== */
-/* (Reutiliza .modal-backdrop, .modal-container, etc. de antes) */
-#token-modal-submit-btn:disabled {
-    background-color: #9ca3af; /* gray-400 */
-    cursor: not-allowed;
-}
-/* ====================================================== */
-/* FIN: MEJORA 3 - Estilos para Modal de Token            */
-/* ====================================================== */
-
-
-/* ====================================================== */
-/* INICIO: MEJORA 2 - Estilos para Filtros de Gráfico      */
-/* ====================================================== */
-.chart-filter-btn {
-    padding: 0.5rem 1rem;
-    border: 1px solid var(--brand-border);
-    border-radius: 0.375rem; /* rounded-md */
-    background-color: var(--brand-surface);
-    color: var(--brand-text);
-    font-weight: 500;
-    transition: all 0.2s ease;
-    cursor: pointer;
-}
-.chart-filter-btn:hover {
-    background-color: #f3f4f6; /* gray-100 */
-}
-.chart-filter-btn.active {
-    background-color: var(--brand-secondary);
-    color: white;
-    border-color: var(--brand-secondary);
-}
-/* ====================================================== */
-/* FIN: MEJORA 2 - Estilos para Filtros de Gráfico        */
-/* ====================================================== */
-
-
-/* Estilos de videos (ya existentes) */
-.video-grid {
-    display: grid;
-    grid-template-columns: repeat(1, 1fr); /* 1 columna por defecto */
-    gap: 1rem;
-}
-@media (min-width: 640px) {
-    .video-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-}
-@media (min-width: 1024px) {
-    .video-grid {
-        grid-template-columns: repeat(3, 1fr);
-    }
-}
-.video-card {
-    border: 1px solid var(--brand-border);
-    border-radius: 0.5rem;
-    overflow: hidden;
-    background-color: #f9fafb;
-    transition: all 0.2s ease;
-}
-.video-card:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-    transform: translateY(-1px);
-}
-.video-thumbnail {
-    display: block;
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    object-fit: cover;
-    background-color: #e5e7eb;
-    border-bottom: 1px solid var(--brand-border);
-}
+/* ... existing code ... -->
