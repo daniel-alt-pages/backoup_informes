@@ -45,7 +45,10 @@ let crudCache = {
 
 // --- 1. INICIALIZACIÓN DE LA APLICACIÓN ---
 
-document.addEventListener('DOMContentLoaded', () => {
+// (CORREGIDO v6.1) Cambiar de 'DOMContentLoaded' a 'load'
+// 'load' espera a que TODAS las librerías (PapaParse, Chart.js, Lucide) estén cargadas.
+// Esto previene el error "Papa is not defined".
+window.addEventListener('load', () => {
     // Asignar listeners de eventos
     setupEventListeners();
 
