@@ -11,8 +11,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <!-- Flatpickr (Selector de Fecha) -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    
+    <!-- (CORREGIDO v5.3) Flatpickr (Selector de Fecha) ELIMINADO para evitar conflictos con el 'ojo' -->
+    <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"> -->
+    
     <!-- Chart.js (Gráficos) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Adaptador de fecha para Chart.js (Requerido para la gráfica de crecimiento) -->
@@ -88,7 +90,7 @@
                     <label for="password" class="block text-sm font-medium mb-1">Contraseña (Fecha de Nacimiento)</label>
                     <!-- Contenedor del ojo (NUEVO) -->
                     <div class="relative">
-                        <input type="password" id="password" class="form-input w-full pr-10" placeholder="DD/MM/YYYY" required>
+                        <input type="password" id="password" class="form-input w-full pr-10" placeholder="DD/MM/YYYY o Contraseña Admin" required>
                         <button type="button" id="toggle-password" class="absolute inset-y-0 right-0 px-3 flex items-center text-gray-500 hover:text-brand-secondary" title="Mostrar/Ocultar contraseña">
                             <!-- Ojo Abierto (default) -->
                             <svg id="eye-open" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -610,8 +612,11 @@
     </div>
 
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+    
+    <!-- (CORREGIDO v5.3) Flatpickr (Selector de Fecha) ELIMINADO -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script> -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script> -->
+    
     <script src="script.js"></script>
 </body>
 </html>
