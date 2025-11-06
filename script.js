@@ -1,1297 +1,696 @@
 // --- Variables Globales y Configuración ---
 const SUPER_USER_CREDENTIALS = { username: "admin", password: "20/7/2023" };
-const BASE_DATA_URL = `https://raw.githubusercontent.com/daniel-alt-pages/backoup_informes/main/`; // (NUEVO) URL Base del Repo
+const BASE_DATA_URL = `https://raw.githubusercontent.com/daniel-alt-pages/backoup_informes/main/`;
 const TIMESTAMP = Date.now(); // Cache-busting
 
-// (NUEVO) Rutas a los archivos de la nueva arquitectura
+// Rutas a los archivos de la arquitectura
 const URLS = {
     studentDatabase: `${BASE_DATA_URL}database/student_database.csv?t=${TIMESTAMP}`,
     scoresDatabase: `${BASE_DATA_URL}database/scores_database.csv?t=${TIMESTAMP}`,
     testIndex: `${BASE_DATA_URL}database/test_index.json?t=${TIMESTAMP}`
 };
 
-// (NUEVO) Almacenes de datos
+// ======================================================
+// INICIO: MEJORA 3 - Configuración de GitHub API (Actualizado)
+// ======================================================
+// ¡Token ELIMINADO de aquí! Se pedirá en un modal.
+const REPO_OWNER = "daniel-alt-pages";
+const REPO_NAME = "backoup_informes";
+const REPO_BRANCH = "main";
+const STUDENT_DB_PATH = "database/student_database.csv";
+const GITHUB_API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${STUDENT_DB_PATH}`;
+
+// (NUEVO) Variable para guardar los cambios pendientes
+let PENDING_STUDENT_CSV_UPDATE = null;
+// ======================================================
+// FIN: MEJORA 3 - Configuración de GitHub API
+// ======================================================
+
+
+// Almacenes de datos
 let STUDENT_DB = {};           // Almacena datos de login (1 fila por estudiante)
 let SCORES_DB = [];            // Almacena TODOS los puntajes (múltiples filas por estudiante)
 let TEST_INDEX = {};           // Almacena el "mapa" de pruebas desde test_index.json
 let ALL_STUDENTS_ARRAY = [];   // (Admin) Lista única de estudiantes de STUDENT_DB
 let CURRENT_STUDENT_REPORTS = []; // (Estudiante) Informes del estudiante que inició sesión
 let CURRENT_STUDENT_DATA = null; // (Estudiante) Datos de login del estudiante
+let isAdminViewingReport = false; // (Admin) Bandera de suplantación
 
-// (NUEVO) Almacenes para datos de pruebas cacheados
-let CACHED_TEST_DATA = {
-    // "sg11_07": { answers_s1: {...}, keys_s1: {...}, stats_s1: {...}, ... }
-};
+// Almacenes para datos de pruebas cacheados
+let CACHED_TEST_DATA = {};
 
-// --- Definiciones de Skills (sin cambios) ---
-const skillsData = {
-    lectura: {
-        color: 'var(--color-lectura)',
-        levels: [
-            { label: 'Bajo', min: 0, range: '0-35', color: '#ef4444', desc: 'No alcanza el desempeño mínimo esperado.' },
-            { label: 'Medio', min: 36, range: '36-50', color: '#f97316', desc: 'Identifica información explícita en textos sencillos.' },
-            { label: 'Alto', min: 51, range: '51-70', color: '#eab308', desc: 'Comprende textos de mediana complejidad y articula partes para darle un sentido global.' },
-            { label: 'Sobresaliente', min: 71, range: '71-100', color: '#22c55e', desc: 'Analiza críticamente textos complejos y evalúa sus contenidos y estrategias discursivas.' }
-        ],
-        competencies: [
-            { name: 'Identificar y entender los contenidos locales', skills: [
-                { name: 'Habilidad 1.1', desc: 'Recupera información explícita de un texto.', level: 2 },
-                { name: 'Habilidad 1.2', desc: 'Identifica el significado de palabras en su contexto.', level: 2 },
-                { name: 'Habilidad 1.3', desc: 'Reconoce la función de conectores y signos de puntuación.', level: 3 }
-            ]},
-            { name: 'Comprender cómo se articulan las partes de un texto', skills: [
-                    { name: 'Habilidad 2.1', desc: 'Identifica la idea principal y las ideas secundarias.', level: 2 },
-                    { name: 'Habilidad 2.2', desc: 'Comprende la relación entre diferentes partes del texto (inicio, nudo, desenlace).', level: 3 },
-                    { name: 'Habilidad 2.3', desc: 'Analiza la estructura argumentativa de un texto.', level: 4 }
-            ]},
-            { name: 'Reflexionar a partir de un texto y evaluar su contenido', skills: [
-                { name: 'Habilidad 3.1', desc: 'Establece relaciones entre el texto y su contexto.', level: 3 },
-                { name: 'Habilidad 3.2', desc: 'Evalúa la validez de los argumentos presentados.', level: 4 },
-                { name: 'Habilidad 3.3', desc: 'Adopta una postura crítica frente al texto.', level: 4 }
-            ]}
-        ]
-    },
-    matematicas: {
-         color: 'var(--color-matematicas)',
-         levels: [
-            { label: 'Bajo', min: 0, range: '0-35', color: '#ef4444', desc: 'No alcanza el desempeño mínimo esperado.' },
-            { label: 'Medio', min: 36, range: '36-50', color: '#f97316', desc: 'Resuelve problemas simples que requieren operaciones básicas.' },
-            { label: 'Alto', min: 51, range: '51-70', color: '#eab308', desc: 'Resuelve problemas de mediana complejidad, aplicando conceptos y representaciones.' },
-            { label: 'Sobresaliente', min: 71, range: '71-100', color: '#22c55e', desc: 'Analiza situaciones, argumenta y modela problemas complejos.' }
-        ],
-        competencies: [
-            { name: 'Interpretación y representación', skills: [
-                    { name: 'Habilidad 1.1', desc: 'Extrae información de tablas, gráficos y esquemas.', level: 2 },
-                    { name: 'Habilidad 1.2', desc: 'Traduce entre diferentes representaciones (verbal, gráfica, simbólica).', level: 3 },
-                    { name: 'Habilidad 1.3', desc: 'Comprende y utiliza propiedades de figuras geométricas.', level: 3 }
-            ]},
-            { name: 'Formulación y ejecución', skills: [
-                    { name: 'Habilidad 2.1', desc: 'Realiza operaciones básicas (suma, resta, multiplicación, división).', level: 2 },
-                    { name: 'Habilidad 2.2', desc: 'Resuelve ecuaciones lineales y sistemas de ecuaciones.', level: 3 },
-                    { name: 'Habilidad 2.3', desc: 'Aplica conceptos de proporcionalidad, porcentaje y estadística.', level: 3 },
-                    { name: 'Habilidad 2.4', desc: 'Modela situaciones problema usando funciones.', level: 4 }
-            ]},
-            { name: 'Argumentación', skills: [
-                    { name: 'Habilidad 3.1', desc: 'Justifica procedimientos y respuestas en problemas simples.', level: 3 },
-                    { name: 'Habilidad 3.2', desc: 'Valida la coherencia de los resultados obtenidos.', level: 4 },
-                    { name: 'Habilidad 3.3', desc: 'Plantea y evalúa conjeturas matemáticas.', level: 4 }
-            ]}
-        ]
-    },
-    sociales: {
-         color: 'var(--color-sociales)',
-         levels: [
-            { label: 'Bajo', min: 0, range: '0-35', color: '#ef4444', desc: 'No alcanza el desempeño mínimo esperado.' },
-            { label: 'Medio', min: 36, range: '36-50', color: '#f97316', desc: 'Identifica conceptos sociales básicos y reconoce derechos fundamentales.' },
-            { label: 'Alto', min: 51, range: '51-70', color: '#eab308', desc: 'Comprende el funcionamiento del estado y analiza problemas sociales.' },
-            { label: 'Sobresaliente', min: 71, range: '71-100', color: '#22c55e', desc: 'Analiza críticamente fenómenos sociales y evalúa diferentes perspectivas.' }
-        ],
-        competencies: [
-            { name: 'Pensamiento Social', skills: [
-                    { name: 'Habilidad 1.1', desc: 'Identifica actores y eventos en procesos históricos.', level: 2 },
-                    { name: 'Habilidad 1.2', desc: 'Comprende el funcionamiento de la economía básica.', level: 3 },
-                    { name: 'Habilidad 1.3', desc: 'Analiza relaciones espaciales y su impacto en la sociedad.', level: 3 }
-            ]},
-            { name: 'Interpretación y Análisis de Perspectivas', skills: [
-                    { name: 'Habilidad 2.1', desc: 'Reconoce diferentes puntos de vista en un conflicto social.', level: 3 },
-                    { name: 'Habilidad 2.2', desc: 'Analiza fuentes primarias y secundarias.', level: 4 },
-                    { name: 'Habilidad 2.3', desc: 'Compara perspectivas de diferentes actores sociales.', level: 4 }
-            ]},
-            { name: 'Pensamiento Reflexivo y Sistémico', skills: [
-                    { name: 'Habilidad 3.1', desc: 'Comprende los derechos y deberes constitucionales.', level: 2 },
-                    { name: 'Habilidad 3.2', desc: 'Evalúa el impacto de decisiones políticas y económicas.', level: 4 },
-                    { name: 'Habilidad 3.3', desc: 'Propone soluciones éticas a problemas sociales.', level: 4 }
-            ]}
-        ]
-    },
-    ciencias: {
-         color: 'var(--color-ciencias)',
-         levels: [
-            { label: 'Bajo', min: 0, range: '0-35', color: '#ef4444', desc: 'No alcanza el desempeño mínimo esperado.' },
-            { label: 'Medio', min: 36, range: '36-50', color: '#f97316', desc: 'Identifica conceptos básicos de biología, química y física.' },
-            { label: 'Alto', min: 51, range: '51-70', color: '#eab308', desc: 'Explica fenómenos naturales de mediana complejidad y analiza datos.' },
-            { label: 'Sobresaliente', min: 71, range: '71-100', color: '#22c55e', desc: 'Analiza problemas científicos, usa modelos y plantea hipótesis.' }
-        ],
-        competencies: [
-            { name: 'Uso comprensivo del conocimiento científico', skills: [
-                    { name: 'Habilidad 1.1', desc: 'Identifica conceptos básicos de biología (célula, ecosistema).', level: 2 },
-                    { name: 'Habilidad 1.2', desc: 'Reconoce conceptos básicos de química (materia, energía).', level: 2 },
-                    { name: 'Habilidad 1.3', desc: 'Explica fenómenos físicos (movimiento, ondas).', level: 3 },
-                    { name: 'Habilidad 1.4', desc: 'Relaciona conceptos de diferentes áreas de las ciencias.', level: 4 }
-            ]},
-            { name: 'Explicación de fenómenos', skills: [
-                    { name: 'Habilidad 2.1', desc: 'Describe fenómenos naturales cotidianos.', level: 2 },
-                    { name: 'Habilidad 2.2', desc: 'Construye explicaciones para fenómenos de mediana complejidad.', level: 3 },
-                    { name: 'Habilidad 2.3', desc: 'Utiliza modelos científicos para predecir resultados.', level: 4 }
-            ]},
-            { name: 'Indagación', skills: [
-                    { name: 'Habilidad 3.1', desc: 'Interpreta datos presentados en tablas y gráficas.', level: 2 },
-                    { name: 'Habilidad 3.2', desc: 'Identifica variables en un experimento simple.', level: 3 },
-                    { name: 'Habilidad 3.3', desc: 'Plantea hipótesis y diseña experimentos para validarlas.', level: 4 }
-            ]}
-        ]
-    },
-    ingles: {
-        color: 'var(--color-ingles)',
-        levels: [
-            { label: 'A-', min: 0, range: '0-35', color: '#ef4444', desc: 'No alcanza el nivel A1. No supera preguntas de conocimiento mínimo.' },
-            { label: 'A1', min: 36, range: '36-50', color: '#f97316', desc: 'Comprende y utiliza expresiones cotidianas y frases básicas.' },
-            { label: 'A2', min: 51, range: '51-70', color: '#eab308', desc: 'Comprende frases y vocabulario sobre áreas de experiencia relevante.' },
-            { label: 'B1', min: 71, range: '71-100', color: '#22c55e', desc: 'Comprende textos sobre temas familiares y puede describir experiencias.' }
-        ],
-        competencies: [
-             { name: 'Competencia Lingüística', skills: [
-                    { name: 'Habilidad 1.1', desc: 'Reconoce vocabulario básico (familia, colores, números).', level: 1 },
-                    { name: 'Habilidad 1.2', desc: 'Comprende avisos y letreros sencillos.', level: 1 },
-                    { name: 'Habilidad 1.3', desc: 'Entiende descripciones cortas de personas y lugares.', level: 2 },
-                    { name: 'Habilidad 1.4', desc: 'Maneja el presente simple y continuo.', level: 2 }
-             ]},
-             { name: 'Competencia Pragmática', skills: [
-                    { name: 'Habilidad 2.1', desc: 'Identifica la intención comunicativa en mensajes cortos.', level: 2 },
-                    { name: 'Habilidad 2.2', desc: 'Comprende la idea principal en textos sobre temas familiares.', level: 3 },
-                    { name: 'Habilidad 2.3', desc: 'Relaciona partes de un texto para entender su coherencia.', level: 3 }
-             ]},
-             { name: 'Competencia Sociolingüística', skills: [
-                    { name: 'Habilidad 3.1', desc: 'Reconoce fórmulas de cortesía y saludos.', level: 1 },
-                    { name: 'Habilidad 3.2', desc: 'Adapta el lenguaje a situaciones formales e informales simples.', level: 2 }
-             ]}
-        ]
-    }
-};
-
-const subjectDescriptions = {
-    lectura: "Evalúa la capacidad de comprender y tomar posturas críticas frente a textos.",
-    matematicas: "Mide la habilidad para formular y resolver problemas usando conceptos matemáticos.",
-    sociales: "Valora la comprensión de eventos históricos y sociales, y el pensamiento crítico.",
-    ciencias: "Examina la capacidad de analizar fenómenos naturales y proponer explicaciones.",
-    ingles: "Determina el nivel de competencia en la comprensión y uso del idioma inglés."
-};
-const filterOptions = [
-     { id: 'matematicas', name: 'Matemáticas', color: 'var(--color-matematicas)' },
-     { id: 'lectura', name: 'Lectura Crítica', color: 'var(--color-lectura)' },
-     { id: 'sociales', name: 'Sociales y Ciudadanas', color: 'var(--color-sociales)' },
-     { id: 'ciencias', name: 'Ciencias Naturales', color: 'var(--color-ciencias)' },
-     { id: 'ingles', name: 'Inglés', color: 'var(--color-ingles)' },
-];
-const subjects = ['lectura', 'matematicas', 'sociales', 'ciencias', 'ingles'];
-
-// --- Variables de Estado (Admin) ---
+// Estado de la tabla de Admin
 let currentAdminPage = 1;
-const ADMIN_ROWS_PER_PAGE = 25;
-let lastCalculatedTotalPages = 1;
-let currentAdminSort = { key: 'full_name', direction: 'asc' };
-let currentAdminFilter = '';
+let adminRowsPerPage = 10;
+let adminFilteredData = [];
+let currentAdminSort = { column: 'Nombre Completo del Estudiante', direction: 'asc' };
 
-// --- Variables de Estado (General) ---
-let isAdminViewingReport = false;
-let birthDatePicker;
-let elements;
+// Referencias a elementos del DOM
+const elements = {
+    loginSection: document.getElementById('login-section'),
+    loadingSection: document.getElementById('loading-section'),
+    loadingText: document.getElementById('loading-text'),
+    studentDashboard: document.getElementById('student-dashboard-section'),
+    adminDashboard: document.getElementById('admin-dashboard-section'),
+    reportContentSection: document.getElementById('report-content-section'),
+    reportContentBody: document.getElementById('report-content-body'),
+    loginForm: document.getElementById('login-form'),
+    usernameInput: document.getElementById('username'),
+    passwordInput: document.getElementById('password'),
+    loginError: document.getElementById('login-error'),
+    logoutBtn: document.getElementById('logout-btn'),
+    studentName: document.getElementById('student-name'),
+    reportCardsContainer: document.getElementById('report-cards-container'),
+    backToDashboardBtn: document.getElementById('back-to-dashboard-btn'),
+    
+    // Admin
+    adminTableBody: document.getElementById('admin-table-body'),
+    adminSearch: document.getElementById('admin-search'),
+    adminRowsPerPage: document.getElementById('admin-rows-per-page'),
+    adminPageInfo: document.getElementById('admin-page-info'),
+    adminPrevPage: document.getElementById('admin-prev-page'),
+    adminNextPage: document.getElementById('admin-next-page'),
+    
+    // Admin Modal
+    adminModalBackdrop: document.getElementById('admin-modal-backdrop'),
+    adminModalContainer: document.getElementById('admin-modal-container'),
+    adminModalHeader: document.getElementById('admin-modal-header'),
+    adminModalBody: document.getElementById('admin-modal-body'),
+    adminModalCloseBtn: document.getElementById('admin-modal-close-btn'),
 
-// --- Instancias de Gráficos ---
-let subjectAvgChartInstance = null;
-let scoreDistChartInstance = null;
-let growthChartSimulacroInstance = null;
-let growthChartMinisimulacroInstance = null;
+    // (NUEVO) Admin Stats (Mejora 1)
+    statsTestSelect: document.getElementById('stats-test-select'),
+    statsAnalyzeBtn: document.getElementById('stats-analyze-btn'),
+    statsLoading: document.getElementById('stats-loading'),
+    statsResultsContainer: document.getElementById('stats-results-container'),
+    statsResultsTitle: document.getElementById('stats-results-title'),
+    statsResultsTableBody: document.getElementById('stats-results-table-body'),
 
-// --- Constantes para sessionStorage ---
-const SESSION_USER_TYPE_KEY = 'informeSaberUserType_v3';
-const SESSION_USER_ID_KEY = 'informeSaberUserId_v3';
+    // (NUEVO) Admin CRUD (Mejora 3)
+    addStudentForm: document.getElementById('add-student-form'),
+    addStudentBtn: document.getElementById('add-student-btn'),
+    crudStatus: document.getElementById('crud-status'),
 
-// --- Funciones Helper ---
-function parseCSVLine(line) {
-    const values = [];
-    let inQuote = false;
-    let value = '';
-    if (!line) return [];
-    for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (char === '"') { inQuote = !inQuote; }
-        else if (char === ',' && !inQuote) { values.push(value.trim()); value = ''; }
-        else { value += char; }
-    }
-    values.push(value.trim());
-    return values;
- }
-function normalizeHeader(str) {
-    return (str || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-}
-function getSubjectFromHeader(header) {
-    const lowerHeader = header.toLowerCase();
-    if (lowerHeader.includes('matemáticas') || lowerHeader.includes('matematicas')) return 'matematicas';
-    if (lowerHeader.includes('lectura')) return 'lectura';
-    if (lowerHeader.includes('sociales')) return 'sociales';
-    if (lowerHeader.includes('ciencias')) return 'ciencias';
-    if (lowerHeader.includes('ingles') || lowerHeader.includes('inglés')) return 'ingles';
-    return null;
-}
-function formatTestDate(dateString) {
-    try {
-        const [year, month, day] = dateString.split('-').map(Number);
-        const date = new Date(year, month - 1, day);
-        return date.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
-    } catch (e) {
-        return dateString; // Devuelve la original si falla
-    }
-}
+    // (NUEVO) CRUD Modal (Mejora 3)
+    tokenModal: document.getElementById('token-modal'),
+    tokenModalCloseBtn: document.getElementById('token-modal-close-btn'),
+    tokenModalSubmitBtn: document.getElementById('token-modal-submit-btn'),
+    tokenModalStatus: document.getElementById('token-modal-status'),
+    githubTokenInput: document.getElementById('github-token'),
 
-// --- (NUEVO) Carga y Parseo de Datos (Arquitectura v3) ---
-async function loadAllData() {
-    try {
-        console.log("Iniciando carga de datos v3...");
-        const [studentRes, scoresRes, testIndexRes] = await Promise.all([
-            fetch(URLS.studentDatabase, { cache: "no-store" }),
-            fetch(URLS.scoresDatabase, { cache: "no-store" }),
-            fetch(URLS.testIndex, { cache: "no-store" })
-        ]);
+    // (NUEVO) Student Stats (Mejora 2)
+    growthChartFilters: document.getElementById('growth-chart-filters')
+};
 
-        if (!studentRes.ok) throw new Error(`Error al cargar ${URLS.studentDatabase}`);
-        if (!scoresRes.ok) throw new Error(`Error al cargar ${URLS.scoresDatabase}`);
-        if (!testIndexRes.ok) throw new Error(`Error al cargar ${URLS.testIndex}`);
+// --- Inicialización ---
 
-        const [studentCsv, scoresCsv, testIndexJson] = await Promise.all([
-            studentRes.text(),
-            scoresRes.text(),
-            testIndexRes.json()
-        ]);
+document.addEventListener('DOMContentLoaded', () => {
+    // Cargar datos principales
+    loadAllData();
 
-        TEST_INDEX = testIndexJson; // Guardar el mapa de pruebas
-
-        parseStudentDatabase(studentCsv); // Parsear datos de login
-        parseScoresDatabase(scoresCsv); // Parsear todos los puntajes
-
-        console.log("Datos v3 parseados correctamente.");
-        console.log(`Estudiantes: ${Object.keys(STUDENT_DB).length}, Puntajes: ${SCORES_DB.length}, Pruebas: ${Object.keys(TEST_INDEX).length}`);
-        
-        // (NUEVO) Pre-procesar datos para admin
-        ALL_STUDENTS_ARRAY = Object.values(STUDENT_DB);
-        ALL_STUDENTS_ARRAY.forEach(student => {
-            student.report_count = SCORES_DB.filter(score => score.doc_number === student.doc_number).length;
-        });
-
-    } catch (error) {
-        console.error("Error crítico durante la carga o parseo de datos v3:", error);
-        if (elements && elements.loginError) {
-            elements.loginError.textContent = 'Error al cargar datos base. Intente recargar.';
-            elements.loginError.classList.remove('hidden');
-        }
-    }
-}
-
-function parseStudentDatabase(csvText) {
-    STUDENT_DB = {};
-    const lines = csvText.trim().split(/\r?\n/).filter(Boolean);
-    if (lines.length < 2) return;
-    const headers = parseCSVLine(lines[0]).map(normalizeHeader);
-
-    const docNumberIndex = headers.indexOf('doc_number');
-    const docTypeIndex = headers.indexOf('doc_type');
-    const nameIndex = headers.indexOf('full_name');
-    const birthDateIndex = headers.indexOf('birth_date');
-    const emailIndex = headers.indexOf('email');
-
-    if ([docNumberIndex, docTypeIndex, nameIndex, birthDateIndex].some(index => index === -1)) {
-        console.warn("Faltan encabezados principales en student_database.csv");
-    }
-
-    const parseBirthDate = (dateString) => {
-        if (!dateString) return '';
-        const m = dateString.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-        return m ? `${parseInt(m[1])}/${parseInt(m[2])}/${m[3]}` : dateString.trim();
-    };
-
-    for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i]);
-        if (values.length < headers.length) continue;
-        const docNumber = values[docNumberIndex]?.trim();
-        if (!docNumber) continue;
-
-        STUDENT_DB[docNumber] = {
-            doc_number: docNumber,
-            doc_type: values[docTypeIndex] || '-',
-            full_name: values[nameIndex] || 'N/A',
-            birth_date: parseBirthDate(values[birthDateIndex]),
-            email: values[emailIndex] || '-',
-        };
-    }
-}
-
-function parseScoresDatabase(csvText) {
-    SCORES_DB = [];
-    const lines = csvText.trim().split(/\r?\n/).filter(Boolean);
-    if (lines.length < 2) return;
-    const headers = parseCSVLine(lines[0]).map(normalizeHeader);
-
-    const docNumberIndex = headers.indexOf('doc_number');
-    const testIdIndex = headers.indexOf('test_id');
-    const testDateIndex = headers.indexOf('test_date');
-    const globalIndex = headers.indexOf('global_score');
-    const matIndex = headers.indexOf('mat_score');
-    const lecIndex = headers.indexOf('lec_score');
-    const socIndex = headers.indexOf('soc_score');
-    const cienIndex = headers.indexOf('cien_score');
-    const ingIndex = headers.indexOf('ing_score');
-
-    for (let i = 1; i < lines.length; i++) {
-        const values = parseCSVLine(lines[i]);
-        if (values.length < headers.length) continue;
-        const docNumber = values[docNumberIndex]?.trim();
-        if (!docNumber) continue;
-
-        SCORES_DB.push({
-            doc_number: docNumber,
-            test_id: values[testIdIndex] || 'unknown',
-            test_date: values[testDateIndex] || '1970-01-01',
-            puntajes: {
-                matematicas: parseInt(values[matIndex], 10) || 0,
-                lectura: parseInt(values[lecIndex], 10) || 0,
-                sociales: parseInt(values[socIndex], 10) || 0,
-                ciencias: parseInt(values[cienIndex], 10) || 0,
-                ingles: parseInt(values[ingIndex], 10) || 0,
-            },
-            puntajeGlobal: parseInt(values[globalIndex], 10) || 0,
-        });
-    }
-}
-
-// --- (NUEVO) Carga de datos de una prueba específica (Bajo Demanda) ---
-
-// Esta función carga las claves, respuestas y videos de UNA prueba
-async function loadTestData(testId) {
-    if (CACHED_TEST_DATA[testId]) {
-        return CACHED_TEST_DATA[testId]; // Devuelve desde caché si ya existe
-    }
-
-    const testInfo = TEST_INDEX[testId];
-    if (!testInfo) {
-        console.error(`No se encontró la prueba con ID: ${testId} en test_index.json`);
-        return null;
-    }
-
-    try {
-        // 1. Crear un objeto para esta prueba
-        const testData = {
-            test_id: testId,
-            name: testInfo.name,
-            type: testInfo.type || 'simulacro',
-            answers: {}, // Para minisimulacros
-            keys: {},    // Para minisimulacros
-            answers_s1: {},
-            keys_s1: {},
-            headers_s1: [],
-            stats_s1: {},
-            answers_s2: {},
-            keys_s2: {},
-            headers_s2: [],
-            stats_s2: {},
-            videos: {}
-        };
-
-        // 2. Cargar los archivos CSV de respuestas y claves
-        const fetchPromises = [];
-        
-        // Simulacro General (2 sesiones)
-        if (testInfo.type === 'simulacro') {
-            fetchPromises.push(fetch(BASE_DATA_URL + testInfo.answers_s1, { cache: "no-store" }).then(res => res.text()));
-            fetchPromises.push(fetch(BASE_DATA_URL + testInfo.keys_s1, { cache: "no-store" }).then(res => res.text()));
-            fetchPromises.push(fetch(BASE_DATA_URL + testInfo.answers_s2, { cache: "no-store" }).then(res => res.text()));
-            fetchPromises.push(fetch(BASE_DATA_URL + testInfo.keys_s2, { cache: "no-store" }).then(res => res.text()));
-        } 
-        // Minisimulacro (1 sesión)
-        else {
-            fetchPromises.push(fetch(BASE_DATA_URL + testInfo.answers, { cache: "no-store" }).then(res => res.text()));
-            fetchPromises.push(fetch(BASE_DATA_URL + testInfo.keys, { cache: "no-store" }).then(res => res.text()));
-        }
-
-        // Cargar videos (siempre)
-        if (testInfo.videos) {
-            fetchPromises.push(fetch(BASE_DATA_URL + testInfo.videos, { cache: "no-store" }).then(res => res.json()));
-        }
-
-        const results = await Promise.all(fetchPromises);
-
-        // 3. Parsear los resultados
-        let videoData = {};
-        if (testInfo.type === 'simulacro') {
-            const [s1AnsCsv, s1KeyCsv, s2AnsCsv, s2KeyCsv] = results;
-            testData.headers_s1 = parseAnswerKeys(s1KeyCsv, testData.keys_s1);
-            testData.headers_s2 = parseAnswerKeys(s2KeyCsv, testData.keys_s2);
-            parseStudentAnswers(s1AnsCsv, testData.answers_s1);
-            parseStudentAnswers(s2AnsCsv, testData.answers_s2);
-            if (testInfo.videos) videoData = results[4];
-        } else {
-            const [ansCsv, keyCsv] = results;
-            testData.headers_s1 = parseAnswerKeys(keyCsv, testData.keys_s1); // Usamos s1 por conveniencia
-            parseStudentAnswers(ansCsv, testData.answers_s1);
-            if (testInfo.videos) videoData = results[2];
-        }
-
-        testData.videos = videoData;
-
-        // 4. Calcular estadísticas para esta prueba
-        calculateQuestionStatistics(testData);
-
-        // 5. Guardar en caché y devolver
-        CACHED_TEST_DATA[testId] = testData;
-        return testData;
-
-    } catch (error) {
-        console.error(`Error cargando datos para la prueba ${testId}:`, error);
-        return null;
-    }
-}
-
-// --- (MODIFICADO) Cálculo de Estadísticas ---
-
-// (MODIFICADO) Ahora calcula promedios globales para *ambos* tipos de prueba
-function calculateGlobalAverages() {
-    const averages = {
-        simulacro: { ...subjects.reduce((acc, s) => ({...acc, [s]: 0}), {}), global: 0, count: 0 },
-        minisimulacro: { ...subjects.reduce((acc, s) => ({...acc, [s]: 0}), {}), global: 0, count: 0 }
-    };
-
-    SCORES_DB.forEach(score => {
-        const testType = TEST_INDEX[score.test_id]?.type || 'simulacro';
-        const target = averages[testType];
-        
-        subjects.forEach(subject => {
-            target[subject] += score.puntajes[subject] || 0;
-        });
-        target.global += score.puntajeGlobal || 0;
-        target.count++;
+    // Manejadores de eventos
+    elements.loginForm?.addEventListener('submit', handleLogin);
+    elements.logoutBtn?.addEventListener('click', handleLogout);
+    elements.backToDashboardBtn?.addEventListener('click', showDashboard);
+    
+    // Manejadores de Admin
+    elements.adminSearch?.addEventListener('input', () => {
+        currentAdminPage = 1;
+        renderAdminTable();
     });
-
-    // Calcular promedios
-    ['simulacro', 'minisimulacro'].forEach(type => {
-        const target = averages[type];
-        if (target.count > 0) {
-            subjects.forEach(subject => {
-                target[subject] = Math.round(target[subject] / target.count);
-            });
-            target.global = Math.round(target.global / target.count);
+    elements.adminRowsPerPage?.addEventListener('change', (e) => {
+        adminRowsPerPage = parseInt(e.target.value, 10);
+        currentAdminPage = 1;
+        renderAdminTable();
+    });
+    elements.adminPrevPage?.addEventListener('click', () => {
+        if (currentAdminPage > 1) {
+            currentAdminPage--;
+            renderAdminTable();
+        }
+    });
+    elements.adminNextPage?.addEventListener('click', () => {
+        const totalPages = Math.ceil(adminFilteredData.length / adminRowsPerPage);
+        if (currentAdminPage < totalPages) {
+            currentAdminPage++;
+            renderAdminTable();
         }
     });
     
-    return averages;
-}
-
-// (MODIFICADO) Ahora calcula estadísticas para UNA prueba específica
-function calculateQuestionStatistics(testData) {
-    console.log(`Calculando estadísticas para ${testData.test_id}...`);
-    const studentDocNumbers = Object.keys(STUDENT_DB); // Lista de todos los estudiantes
-    const totalStudents = studentDocNumbers.length;
-    if (totalStudents === 0) return;
-
-    // Procesar Sesión 1 (o única sesión)
-    if (testData.headers_s1) {
-        testData.headers_s1.forEach(header => {
-            const correctAnswer = testData.keys_s1[header];
-            if (!correctAnswer) return; 
-
-            let correctCount = 0;
-            studentDocNumbers.forEach(docNumber => {
-                const studentAnswers = testData.answers_s1[docNumber] || {};
-                const studentAnswer = studentAnswers[header];
-                if (studentAnswer && studentAnswer.toUpperCase() === correctAnswer.toUpperCase()) {
-                    correctCount++;
-                }
-            });
-            testData.stats_s1[header] = {
-                correct: correctCount,
-                total: totalStudents,
-                percent: (correctCount / totalStudents) * 100
-            };
-        });
-    }
-
-    // Procesar Sesión 2 (si existe)
-    if (testData.headers_s2) {
-        testData.headers_s2.forEach(header => {
-            const correctAnswer = testData.keys_s2[header];
-            if (!correctAnswer) return;
-
-            let correctCount = 0;
-            studentDocNumbers.forEach(docNumber => {
-                const studentAnswers = testData.answers_s2[docNumber] || {};
-                const studentAnswer = studentAnswers[header];
-                if (studentAnswer && studentAnswer.toUpperCase() === correctAnswer.toUpperCase()) {
-                    correctCount++;
-                }
-            });
-            testData.stats_s2[header] = {
-                correct: correctCount,
-                total: totalStudents,
-                percent: (correctCount / totalStudents) * 100
-            };
-        });
-    }
-    console.log(`Estadísticas para ${testData.test_id} calculadas.`);
-}
-
-
-// --- (NUEVO) Generación HTML (Dinámica) ---
-function generateReportHtml(studentReportData, testData, groupAverages) {
-    if (!studentReportData || !testData) return '';
-     const uniqueIdSuffix = studentReportData.doc_number;
-
-     const getLevel = (score, levels) => {
-         for (let i = levels.length - 1; i >= 0; i--) { if (score >= levels[i].min) return { ...levels[i], index: i }; }
-         return { ...levels[0], index: 0 };
-     };
-     const renderLevelSteps = (score, levels) => {
-         const currentLevel = getLevel(score, levels);
-         return levels.map((level, index) => {
-             let status = 'future';
-             if (index < currentLevel.index) status = 'passed';
-             if (index === currentLevel.index) status = 'active';
-             const labelClass = status === 'active' ? 'text-white' : (status === 'passed' ? 'text-gray-400' : 'text-gray-500');
-             const rangeClass = status === 'active' ? 'text-white/90' : (status === 'passed' ? 'text-gray-400/90' : 'text-gray-500/90');
-             return `
-                 <div class="level-step-item ${status}" style="${status === 'active' ? `background-color: ${level.color}; border-color: ${level.color};` : ''}">
-                     <span class="level-label ${labelClass}">${level.label}</span>
-                     <span class="level-range ${rangeClass}">${level.range}</span>
-                 </div>
-             `;
-         }).join('');
-     };
-    
-     const renderCompetencies = (subjectKey, score, competencies, uniqueId) => {
-         const currentLevel = getLevel(score, skillsData[subjectKey].levels);
-         let levelOffset = (subjectKey === 'ingles') ? 1 : 2;
-
-         return competencies.map((comp, compIndex) => {
-             const skillsHtml = (comp.skills || []).map((skill, skillIndex) => {
-                 let isAchieved;
-                 if (subjectKey === 'ingles') { isAchieved = currentLevel.index >= skill.level; }
-                 else { isAchieved = currentLevel.index >= (skill.level - 1); }
-
-                 const icon = isAchieved
-                     ? `<svg class="h-5 w-5 text-green-500 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>`
-                     : `<svg class="h-5 w-5 text-gray-400 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 101.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>`;
-
-                 return `
-                     <div class="skill-item ${isAchieved ? 'font-medium text-gray-800' : 'text-gray-600'}">
-                         ${icon}
-                         <div>
-                             <strong class="text-sm block text-gray-900 leading-tight">${skill.name || 'Habilidad sin nombre'}</strong>
-                             <span class="text-xs text-gray-600">${skill.desc || 'Descripción no disponible'}</span>
-                         </div>
-                     </div>
-                 `;
-             }).join('');
-
-             return `
-                 <details class="competency-card">
-                     <summary>
-                         <h4 class="text-base font-semibold text-brand-header pr-2">${comp.name || 'Competencia sin nombre'}</h4>
-                         <svg class="summary-chevron h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
-                     </summary>
-                     <div class="competency-content space-y-3">
-                         ${skillsHtml || '<p class="text-xs text-gray-500 italic">No hay habilidades detalladas para esta competencia.</p>'}
-                     </div>
-                 </details>
-             `;
-         }).join('');
-     };
-
-     const subjectCardsHtml = filterOptions.map(subjectInfo => {
-         const subjectKey = subjectInfo.id;
-         const subjectData = skillsData[subjectKey];
-         if (!subjectData) return '';
-         const score = studentReportData.puntajes[subjectKey] || 0;
-         
-         // (NUEVO) Compara con el promedio del tipo de prueba correcto
-         const avgData = groupAverages[testData.type] || groupAverages['simulacro'];
-         const groupScore = avgData[subjectKey] || 0;
-         const scoreDiff = score - groupScore;
-
-         let comparisonHtml = '';
-         // (NUEVO) No muestra comparativa si el promedio es 0 (ej. no hay datos de minisimulacros)
-         if (groupScore > 0) {
-            if (scoreDiff > 5) { comparisonHtml = `<p class="text-xs sm:text-sm text-green-700 bg-green-100 px-2 py-0.5 rounded-full font-medium inline-block mt-1"><strong>+${scoreDiff}</strong> vs Prom. (${groupScore})</p>`; }
-            else if (scoreDiff < -5) { comparisonHtml = `<p class="text-xs sm:text-sm text-red-700 bg-red-100 px-2 py-0.5 rounded-full font-medium inline-block mt-1"><strong>${scoreDiff}</strong> vs Prom. (${groupScore})</p>`; }
-            else { comparisonHtml = `<p class="text-xs sm:text-sm text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full font-medium inline-block mt-1"><strong>${scoreDiff >= 0 ? '+' : ''}${scoreDiff}</strong> vs Prom. (${groupScore})</p>`; }
-         } else {
-            comparisonHtml = `<p class="text-xs sm:text-sm text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full font-medium inline-block mt-1">Prom. no disponible</p>`;
-         }
-
-         return `
-             <div class="card p-4 sm:p-6 mb-6 border-t-4 sm:border-t-8" style="border-top-color: ${subjectData.color};">
-                 <div class="flex flex-col sm:flex-row justify-between sm:items-start gap-3 mb-4">
-                     <div>
-                         <h2 class="text-xl sm:text-2xl font-bold" style="color: ${subjectData.color};">${subjectInfo.name}</h2>
-                         <p class="text-gray-600 mt-1 text-sm sm:text-base">${subjectDescriptions[subjectKey] || ''}</p>
-                     </div>
-                     <div class="flex-shrink-0 text-left sm:text-right">
-                         <p class="text-3xl sm:text-4xl font-extrabold text-gray-800">${score}<span class="text-xl sm:text-2xl font-medium text-gray-500">/100</span></p>
-                         ${comparisonHtml}
-                     </div>
-                 </div>
-                 
-                 ${renderFeedbackVideos(subjectKey, testData)}
-                 
-                 <div class="mb-5 sm:mb-6">
-                     <h3 class="text-base sm:text-lg font-semibold text-brand-header mb-1 sm:mb-2 flex items-center gap-2">
-                         Nivel: <span class="px-2 py-0.5 rounded text-sm font-bold text-white" style="background-color: ${levelData.color};">${levelData.label}</span>
-                         <span class="tooltip text-gray-400 cursor-help">
-                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" /></svg>
-                             <span class="tooltiptext">${levelData.desc}</span>
-                         </span>
-                     </h3>
-                     <div class="level-steps-container">
-                         ${renderLevelSteps(score, subjectData.levels)}
-                     </div>
-                 </div>
-                 <div>
-                     <h3 class="text-base sm:text-lg font-semibold text-brand-header mb-3">Competencias y Habilidades</h3>
-                     <div class="space-y-3 sm:space-y-4">
-                         ${subjectData.competencies ? renderCompetencies(subjectKey, score, subjectData.competencies, uniqueIdSuffix) : '<p class="text-sm text-gray-500 italic">Detalle de competencias no disponible.</p>'}
-                     </div>
-                 </div>
-             </div>
-         `;
-     }).join('');
-
-     return subjectCardsHtml;
-}
-
-// (NUEVO) Carga videos desde el archivo JSON de la prueba
-function renderFeedbackVideos(subjectKey, testData) {
-    const videos = testData.videos[subjectKey];
-    if (!videos || videos.length === 0) {
-        return ''; // No renderiza nada si no hay videos
-    }
-
-    const videoCardsHtml = videos.map(video => {
-        // (NUEVO) Genera un thumbnail de placeholder si no se provee uno
-        const thumbnailUrl = video.thumbnail_url || `https://placehold.co/320x180/${skillsData[subjectKey]?.color.substring(1) || 'cccccc'}/ffffff?text=${encodeURIComponent(video.title)}`;
-
-        return `
-        <a href="${video.video_link || '#'}" target="_blank" rel="noopener noreferrer" class="video-card group">
-            <img src="${thumbnailUrl}"
-                 alt="Miniatura de ${video.title}"
-                 class="video-thumbnail"
-                 onerror="this.src='https://placehold.co/320x180/e5e7eb/9ca3af?text=Error'"
-            />
-            <div class="video-info">
-                <span class="video-link group-hover:text-brand-blue-dark group-hover:underline">
-                    ${video.title || 'Video de Repaso'}
-                </span>
-                <span class="video-details">
-                    ${video.description || 'General'}
-                </span>
-            </div>
-        </a>
-    `}).join('');
-
-    return `
-        <details class="feedback-videos-container" open>
-            <summary class="feedback-videos-summary group">
-                <div class="flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-brand-primary" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8.067v3.866a1 1 0 001.555.832l3.197-1.933a1 1 0 000-1.664l-3.197-1.933z" clip-rule="evenodd" />
-                    </svg>
-                    <h4 class="text-base font-semibold text-brand-header">Clases de Retroalimentación (${videos.length})</h4>
-                </div>
-                <svg class="summary-chevron h-5 w-5 text-gray-500 transition-transform duration-200" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-                </svg>
-            </summary>
-            <div class="feedback-videos-content">
-                <div class="video-grid">
-                    ${videoCardsHtml}
-                </div>
-            </div>
-        </details>
-    `;
-}
-
-// (NUEVO) Genera el feedback detallado (se adapta a 1 o 2 sesiones)
-function generateDetailedFeedbackHtml(studentDocNumber, testData) {
-    const studentAnswersS1 = testData.answers_s1[studentDocNumber] || {};
-    const studentAnswersS2 = testData.answers_s2[studentDocNumber] || {};
-
-    const generateSessionFeedback = (sessionLabel, questionHeaders, answerKeys, studentAnswers, stats) => {
-        if (!questionHeaders || questionHeaders.length === 0 || Object.keys(answerKeys).length === 0) {
-             return `<p class="text-gray-500 italic px-6 py-4">No hay datos de preguntas o claves para ${sessionLabel}.</p>`;
+    // Ordenar tabla de Admin
+    document.querySelector('thead')?.addEventListener('click', (e) => {
+        const header = e.target.closest('.admin-table-header');
+        if (header && header.dataset.sort) {
+            const column = header.dataset.sort;
+            if (currentAdminSort.column === column) {
+                currentAdminSort.direction = currentAdminSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentAdminSort.column = column;
+                currentAdminSort.direction = 'asc';
+            }
+            currentAdminPage = 1;
+            renderAdminTable();
         }
+    });
+    
+    // Click en "Ver" en la tabla de Admin
+    elements.adminTableBody?.addEventListener('click', (e) => {
+        const viewButton = e.target.closest('.view-report-btn');
+        if (viewButton) {
+            const studentId = viewButton.dataset.studentId;
+            showAdminStudentHistory(studentId);
+        }
+    });
 
-        const questionsBySubject = {};
-        questionHeaders.forEach(header => {
-            const subject = getSubjectFromHeader(header);
-            if (subject) {
-                if (!questionsBySubject[subject]) questionsBySubject[subject] = [];
-                questionsBySubject[subject].push(header);
+    // (NUEVO) Click en un informe DENTRO del modal de admin
+    elements.adminModalBody?.addEventListener('click', async (e) => {
+       const card = e.target.closest('.admin-report-card');
+       if (card && card.dataset.testid) {
+           const testId = card.dataset.testid;
+           const docNumber = card.dataset.docNumber;
+
+           // Simular el estado de "estudiante" para mostrar el informe
+           CURRENT_STUDENT_DATA = STUDENT_DB[docNumber];
+           CURRENT_STUDENT_REPORTS = SCORES_DB.filter(score => score.doc_number === docNumber);
+           isAdminViewingReport = true; // Poner bandera de admin
+
+           closeModal(elements.adminModalBackdrop); // Cerrar modal de admin
+           
+           // Mostrar el informe (la función se encargará del resto)
+           await showIndividualReport(testId); 
+
+           // Limpiar estado
+           isAdminViewingReport = false;
+           CURRENT_STUDENT_DATA = null;
+           CURRENT_STUDENT_REPORTS = [];
+       }
+    });
+
+    // Clicks en Modales (Cerrar)
+    elements.adminModalCloseBtn?.addEventListener('click', () => closeModal(elements.adminModalBackdrop));
+    elements.adminModalBackdrop?.addEventListener('click', (e) => {
+        if (e.target === elements.adminModalBackdrop) {
+            closeModal(elements.adminModalBackdrop);
+        }
+    });
+
+    // ======================================================
+    // INICIO: MEJORA 2 - Listeners de Filtros de Gráfico
+    // ======================================================
+    if (elements.growthChartFilters) {
+        elements.growthChartFilters.addEventListener('click', (e) => {
+            if (e.target.classList.contains('chart-filter-btn')) {
+                // Actualizar estilo de botones
+                elements.growthChartFilters.querySelectorAll('.chart-filter-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                e.target.classList.add('active');
+
+                // Obtener filtro y re-renderizar el gráfico
+                const filterType = e.target.dataset.filter; // 'all', 'simulacro', 'minisimulacro'
+                
+                // Re-renderizar el gráfico con los datos actuales del estudiante
+                renderGrowthChart(CURRENT_STUDENT_REPORTS, filterType);
             }
         });
+    }
+    // ======================================================
+    // FIN: MEJORA 2 - Listeners de Filtros de Gráfico
+    // ======================================================
 
-        const orderedSubjects = filterOptions.map(opt => opt.id).filter(id => questionsBySubject[id]);
+    // ======================================================
+    // INICIO: MEJORA 1 - Listener de Análisis Estadístico
+    // ======================================================
+    if (elements.statsAnalyzeBtn) {
+        elements.statsAnalyzeBtn.addEventListener('click', async () => {
+            const testId = elements.statsTestSelect.value;
+            if (!testId) {
+                showModalAlert('Por favor, seleccione una prueba para analizar.');
+                return;
+            }
 
-        let html = '';
-        orderedSubjects.forEach(subjectKey => {
-            const subjectInfo = filterOptions.find(opt => opt.id === subjectKey);
-            html += `<div class="feedback-subject-group">
-                         <h4 class="feedback-subject-title" style="border-color: ${subjectInfo?.color || '#ccc'}; color: ${subjectInfo?.color || 'inherit'};">${subjectInfo?.name || subjectKey}</h4>
-                         <div class="feedback-card-list">`;
+            // Mostrar spinner y ocultar resultados anteriores
+            elements.statsLoading.style.display = 'block';
+            elements.statsResultsContainer.style.display = 'none';
+            elements.statsResultsTableBody.innerHTML = '';
+            elements.statsResultsTitle.textContent = `Resultados de Análisis: ${TEST_INDEX[testId].name}`;
 
-            questionsBySubject[subjectKey].forEach(header => {
-                const correctAnswer = answerKeys[header];
-                const studentAnswer = studentAnswers[header];
-                const isCorrect = correctAnswer && studentAnswer && correctAnswer.toUpperCase() === studentAnswer.toUpperCase();
-                const questionNumberMatch = header.match(/\[(\d+)\.*\]/);
-                const questionLabel = questionNumberMatch ? `Pregunta ${questionNumberMatch[1]}` : header;
+            try {
+                // 1. Analizar la prueba
+                const analysisResults = await analyzeTestItems(testId);
 
-                const stat = stats[header];
-                let statsHtml = '<p class="text-xs text-gray-600">Estadísticas no disponibles.</p>';
-                if (stat && stat.total > 0) {
-                    statsHtml = `<p class="text-xs text-gray-600"><strong>${stat.correct} de ${stat.total}</strong> estudiantes (${Math.round(stat.percent)}%) respondieron correctamente.</p>`;
+                // 2. Renderizar los resultados
+                renderStatsTable(analysisResults);
+
+            } catch (error) {
+                console.error(`Error analizando la prueba ${testId}:`, error);
+                showModalAlert(`Error al analizar la prueba. Revise la consola.`);
+            } finally {
+                // Ocultar spinner y mostrar tabla
+                elements.statsLoading.style.display = 'none';
+                elements.statsResultsContainer.style.display = 'block';
+            }
+        });
+    }
+    // ======================================================
+    // FIN: MEJORA 1 - Listener de Análisis Estadístico
+    // ======================================================
+
+    // ======================================================
+    // INICIO: MEJORA 3 - Listener de Formulario CRUD (Actualizado)
+    // ======================================================
+    if (elements.addStudentForm) {
+        elements.addStudentForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Paso 1: Validar datos y guardarlos en caché (localStorage)
+            // No se pide token aquí
+            
+            const statusEl = elements.crudStatus;
+            const buttonEl = elements.addStudentBtn;
+            
+            buttonEl.disabled = true; // Deshabilitar botón de "Añadir"
+            statusEl.textContent = 'Validando...';
+            statusEl.style.color = '#374151';
+            statusEl.style.display = 'inline';
+
+            try {
+                const newStudent = {
+                    nombre: document.getElementById('student-name-crud').value.trim(),
+                    email: document.getElementById('student-email-crud').value.trim(),
+                    docType: document.getElementById('student-doc-type-crud').value,
+                    docNumber: document.getElementById('student-doc-number-crud').value.trim(),
+                    birthdate: document.getElementById('student-birthdate-crud').value.trim(),
+                    dept: document.getElementById('student-dept-crud').value.trim(),
+                    school: document.getElementById('student-school-crud').value.trim(),
+                };
+                
+                // Validar que el estudiante no exista en la BD actual
+                if (STUDENT_DB[newStudent.docNumber] || ALL_STUDENTS_ARRAY.find(s => s.Email === newStudent.email)) {
+                    throw new Error("El número de documento o el email ya existen.");
                 }
 
-                html += `
-                <details class="feedback-card ${isCorrect ? 'correct' : (correctAnswer ? 'incorrect' : '')}">
-                    <summary>
-                        <div class="flex items-center gap-2">
-                            <strong class="font-semibold text-brand-header">${questionLabel}</strong>
-                            ${isCorrect
-                                ? `<span class="text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">Correcta</span>`
-                                : (correctAnswer ? `<span class="text-xs font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full">Incorrecta</span>` : '')
-                            }
-                        </div>
-                        <svg class="indicator h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
-                    </summary>
-                    <div class="feedback-card-content space-y-3">
-                        <div>
-                            <h5 class="text-sm font-semibold text-gray-700 mb-1">Respuestas</h5>
-                            <p><span class="label">Tu Rta: </span> ${isCorrect
-                                ? `<span class="correct-ans font-semibold">${studentAnswer || '-'}</span>`
-                                : `<span class="incorrect-ans font-semibold">${studentAnswer || '-'}</span>`
-                            }</p>
-                            ${(!isCorrect && correctAnswer) ? `<p><span class="label">Correcta: </span><span class="correct-ans font-semibold">${correctAnswer}</span></p>` : ''}
-                            ${!correctAnswer ? `<span class="text-xs text-gray-400">(Sin clave)</span>` : ''}
-                        </div>
-                        <div class="pt-3 border-t border-gray-200">
-                            <h5 class="text-sm font-semibold text-gray-700 mb-1">Estadísticas Globales</h5>
-                            ${statsHtml}
-                        </div>
-                        <!-- (Placeholder) Próximamente: Explicación y Habilidad -->
-                    </div>
-                </details>
-                `;
-            });
-            html += `</div></div>`;
+                // El orden DEBE coincidir con student_database.csv
+                // Nombre Completo del Estudiante,Email,Tipo de Documento,Número de Documento,Fecha de Nacimiento,Departamento,Colegio/institución
+                const newCsvRow = `\n${newStudent.nombre},${newStudent.email},${newStudent.docType},${newStudent.docNumber},${newStudent.birthdate},${newStudent.dept},${newStudent.school}`;
+
+                // Guardar en la variable de "cambios pendientes"
+                PENDING_STUDENT_CSV_UPDATE = newCsvRow;
+                // Guardar en localStorage (como en tu repo 'editor_de_comits')
+                localStorage.setItem('pendingCsvChanges', newCsvRow); 
+
+                // Éxito (Local)
+                statusEl.textContent = '¡Estudiante listo para guardar!';
+                statusEl.style.color = 'var(--brand-green)';
+                elements.addStudentForm.reset();
+                
+                // Pedir el token para confirmar
+                showTokenModal('Añadir Estudiante', 'Para confirmar y añadir este estudiante al repositorio, introduce tu token.');
+
+            } catch (error) {
+                console.error('Error al validar estudiante:', error);
+                statusEl.textContent = `Error: ${error.message}`;
+                statusEl.style.color = 'var(--brand-red)';
+            } finally {
+                buttonEl.disabled = false; // Rehabilitar botón "Añadir"
+            }
         });
-
-        return html || `<p class="text-gray-500 italic px-6 py-4">No se encontraron preguntas para ${sessionLabel}.</p>`;
-    };
-
-    // (NUEVO) Lógica para adaptar la vista
-    const isMini = testData.type === 'minisimulacro';
-    const feedbackS1 = generateSessionFeedback(
-        isMini ? "Resultados" : "Sesión 1",
-        testData.headers_s1, 
-        testData.keys_s1, 
-        studentAnswersS1, 
-        testData.stats_s1
-    );
-
-    let feedbackS2 = '';
-    if (!isMini) {
-        feedbackS2 = generateSessionFeedback("Sesión 2", testData.headers_s2, testData.keys_s2, studentAnswersS2, testData.stats_s2);
     }
 
-    return `
-        <div class="feedback-section">
-            <div class="feedback-header">
-                <h3 class="text-lg sm:text-xl font-semibold text-brand-header">Retroalimentación Detallada por Pregunta</h3>
-                <p class="text-sm text-gray-600 mt-1">Aquí puedes ver tus aciertos y errores en cada sesión.</p>
-            </div>
-            ${!isMini ? `
-            <div class="feedback-tabs">
-                <button class="feedback-tab active" data-tab="s1">Sesión 1</button>
-                <button class="feedback-tab" data-tab="s2">Sesión 2</button>
-            </div>
-            ` : ''}
-            <div>
-                <div id="feedback-s1" class="feedback-content active">
-                    ${feedbackS1}
-                </div>
-                ${!isMini ? `
-                <div id="feedback-s2" class="feedback-content">
-                    ${feedbackS2}
-                </div>
-                ` : ''}
-            </div>
-        </div>
-    `;
-}
+    // (NUEVO) Listener para el botón de submit DEL MODAL DE TOKEN
+    if (elements.tokenModalSubmitBtn) {
+        elements.tokenModalSubmitBtn.addEventListener('click', async () => {
+            const token = elements.githubTokenInput.value.trim();
+            if (!token) {
+                elements.tokenModalStatus.textContent = 'Por favor, introduce un token.';
+                elements.tokenModalStatus.style.display = 'block';
+                return;
+            }
 
+            // Verificar si hay cambios pendientes
+            const newCsvRow = PENDING_STUDENT_CSV_UPDATE || localStorage.getItem('pendingCsvChanges');
+            if (!newCsvRow) {
+                elements.tokenModalStatus.textContent = 'No hay cambios pendientes para guardar.';
+                elements.tokenModalStatus.style.display = 'block';
+                return;
+            }
 
-// --- (NUEVO) Lógica de Navegación y Vistas ---
+            const statusEl = elements.crudStatus; // Mensaje en el formulario principal
+            const tokenStatusEl = elements.tokenModalStatus;
+            const tokenButtonEl = elements.tokenModalSubmitBtn;
 
-// (NUEVO) Muestra la pantalla de selección de informes
-function showSelectionScreen(studentData, studentReports) {
-    if (!studentData || !studentReports) {
-        handleLogout();
-        return;
+            tokenButtonEl.disabled = true;
+            tokenStatusEl.textContent = 'Procesando...';
+            tokenStatusEl.style.display = 'block';
+            
+            try {
+                // 3. Leer el archivo actual de GitHub (usando el token)
+                tokenStatusEl.textContent = 'Leyendo base de datos...';
+                const fileData = await getGitHubFile(GITHUB_API_URL, token);
+                
+                // 4. Decodificar, Añadir, y Recodificar
+                const currentContent = atob(fileData.content); // atob() decodifica Base64
+                
+                // Evitar duplicados si se hace doble clic
+                if (currentContent.includes(newCsvRow.trim())) {
+                    throw new Error("Este estudiante ya fue añadido.");
+                }
+
+                const newContent = currentContent + newCsvRow;
+                const newContentBase64 = btoa(newContent); // btoa() codifica a Base64
+
+                // 5. Escribir (Hacer Commit) del nuevo archivo
+                tokenStatusEl.textContent = 'Guardando en GitHub...';
+                await updateGitHubFile(
+                    GITHUB_API_URL,
+                    token,
+                    `Commit automático: Añadido estudiante`, // Mensaje genérico por seguridad
+                    newContentBase64,
+                    fileData.sha // El 'sha' es OBLIGATORIO
+                );
+
+                // Éxito Final
+                statusEl.textContent = '¡Estudiante añadido con éxito a GitHub!';
+                statusEl.style.color = 'var(--brand-green)';
+                
+                // Limpiar caché y cerrar modal
+                PENDING_STUDENT_CSV_UPDATE = null;
+                localStorage.removeItem('pendingCsvChanges');
+                elements.githubTokenInput.value = ''; // Limpiar token del input
+                closeModal(elements.tokenModal);
+
+                // Forzar recarga de datos para actualizar la tabla de admin
+                statusEl.textContent = 'Actualizando tabla local...';
+                await loadAllData(true); // true = forzar recarga
+                renderAdminTable(); // Re-renderizar la tabla de admin
+                statusEl.textContent = '¡Estudiante añadido con éxito!';
+
+            } catch (error) {
+                console.error('Error al guardar en GitHub:', error);
+                tokenStatusEl.textContent = `Error: ${error.message}`;
+            } finally {
+                tokenButtonEl.disabled = false;
+                 setTimeout(() => {
+                    statusEl.style.display = 'none';
+                    tokenStatusEl.style.display = 'none';
+                }, 5000);
+            }
+        });
     }
-
-    CURRENT_STUDENT_DATA = studentData;
-    CURRENT_STUDENT_REPORTS = studentReports;
-
-    elements.studentNameHeaderSelection.textContent = studentData.full_name;
-
-    const simulacroList = document.getElementById('report-list-simulacro');
-    const minisimulacroList = document.getElementById('report-list-minisimulacro');
     
-    simulacroList.innerHTML = '';
-    minisimulacroList.innerHTML = '';
-
-    let simulacroCount = 0;
-    let miniCount = 0;
-
-    // Ordenar por fecha, más reciente primero
-    studentReports.sort((a, b) => new Date(b.test_date) - new Date(a.test_date));
-
-    studentReports.forEach(report => {
-        const testInfo = TEST_INDEX[report.test_id] || {};
-        const isMini = testInfo.type === 'minisimulacro';
-        
-        const cardHtml = `
-            <div class="report-card" data-testid="${report.test_id}">
-                <div class="report-card-info">
-                    <span class="report-card-title">${testInfo.name || report.test_id}</span>
-                    <span class="report-card-date">${formatTestDate(report.test_date)}</span>
-                </div>
-                <div class="report-card-score">
-                    <span class="report-card-global">${report.puntajeGlobal}</span>
-                    <span class="report-card-label">GLOBAL</span>
-                </div>
-            </div>
-        `;
-
-        if (isMini) {
-            minisimulacroList.innerHTML += cardHtml;
-            miniCount++;
-        } else {
-            simulacroList.innerHTML += cardHtml;
-            simulacroCount++;
+    // (NUEVO) Listener para CERRAR el modal de token
+    elements.tokenModalCloseBtn?.addEventListener('click', () => closeModal(elements.tokenModal));
+    elements.tokenModal?.addEventListener('click', (e) => {
+        if (e.target === elements.tokenModal) {
+            closeModal(elements.tokenModal);
         }
     });
+    // ======================================================
+    // FIN: MEJORA 3 - Listener de Formulario CRUD
+    // ======================================================
+});
 
-    if (simulacroCount === 0) {
-        simulacroList.innerHTML = '<p class="text-gray-500 text-sm">No hay informes de este tipo.</p>';
-    }
-    if (miniCount === 0) {
-        minisimulacroList.innerHTML = '<p class="text-gray-500 text-sm">No hay informes de este tipo.</p>';
-    }
+// --- Funciones de Carga de Datos ---
 
-    // Ocultar botón de gráficas si no hay suficientes datos
-    elements.viewGrowthChartBtn.style.display = studentReports.length > 1 ? 'inline-flex' : 'none';
-
-    elements.loginScreen.classList.add('hidden');
-    elements.adminScreen.classList.add('hidden');
-    elements.reportScreen.classList.add('hidden');
-    elements.selectionScreen.classList.remove('hidden');
-    window.scrollTo(0, 0);
-}
-
-// (NUEVO) Muestra el informe individual
-async function showIndividualReport(testId, fromSession = false) {
-    // 1. Obtener los datos del estudiante y el puntaje de este informe
-    const studentData = CURRENT_STUDENT_DATA;
-    const studentReportData = CURRENT_STUDENT_REPORTS.find(r => r.test_id === testId);
-    
-    if (!studentData || !studentReportData) {
-        console.error("Faltan datos para mostrar el informe.");
-        showSelectionScreen(CURRENT_STUDENT_DATA, CURRENT_STUDENT_REPORTS); // Volver a la selección
-        return;
-    }
-
-    // 2. Poner placeholders mientras carga
-    elements.studentNameHeader.textContent = studentData.full_name;
-    elements.globalScoreNumber.textContent = studentReportData.puntajeGlobal;
-    elements.reportTitleHeader.textContent = TEST_INDEX[testId]?.name || testId;
-    elements.individualReportContent.innerHTML = '<p class="text-center text-gray-500 py-10">Cargando datos del informe...</p>';
-    elements.detailedFeedbackSection.innerHTML = '';
-
-    // 3. Mostrar la pantalla
-    elements.loginScreen.classList.add('hidden');
-    elements.adminScreen.classList.add('hidden');
-    elements.selectionScreen.classList.add('hidden');
-    elements.reportScreen.classList.remove('hidden');
-
-    elements.logoutBtnReport.classList.toggle('hidden', isAdminViewingReport);
-    elements.backToAdminBtn.classList.toggle('hidden', !isAdminViewingReport);
-    elements.backToSelectionBtn.classList.toggle('hidden', isAdminViewingReport); // (NUEVO) Oculta "Mis Informes" si es admin
-
-    if (!fromSession) window.scrollTo(0, 0);
-
-    // 4. Cargar los datos específicos de la prueba (claves, respuestas, videos, etc.)
-    const testData = await loadTestData(testId);
-    if (!testData) {
-        elements.individualReportContent.innerHTML = '<p class="text-center text-red-500 py-10">Error al cargar los datos de esta prueba.</p>';
-        return;
-    }
-    
-    // 5. Calcular promedios grupales (solo si no están ya)
-    const globalAverages = calculateGlobalAverages();
-    
-    // 6. Generar y mostrar el HTML completo
-    const reportHtml = generateReportHtml(studentReportData, testData, globalAverages);
-    elements.individualReportContent.innerHTML = reportHtml;
-    
-    const feedbackHtml = generateDetailedFeedbackHtml(studentData.doc_number, testData);
-    elements.detailedFeedbackSection.innerHTML = feedbackHtml;
-    
-    // 7. Añadir listeners para las pestañas de feedback
-    addToggleListeners('#report-screen'); 
-}
-
-// (NUEVO) Muestra la vista de Admin
-function showAdminView(fromSession = false) {
-    renderAdminDashboard();
-    elements.loginScreen.classList.add('hidden');
-    elements.reportScreen.classList.add('hidden');
-    elements.selectionScreen.classList.add('hidden');
-    elements.adminScreen.classList.remove('hidden');
-    elements.body.classList.remove('overflow-hidden');
-    if (!fromSession) window.scrollTo(0, 0);
-}
-
-// (NUEVO) Vuelve a la pantalla de selección
-function handleBackToSelection() {
-    elements.reportScreen.classList.add('hidden');
-    elements.individualReportContent.innerHTML = '';
-    elements.detailedFeedbackSection.innerHTML = '';
-    showSelectionScreen(CURRENT_STUDENT_DATA, CURRENT_STUDENT_REPORTS);
-}
-
-// --- (MODIFICADO) Lógica de Admin ---
-function renderAdminDashboard() {
-    const globalAverages = calculateGlobalAverages();
-    
-    // (NUEVO) Actualizar todos los stats
-    elements.statTotalStudents.textContent = ALL_STUDENTS_ARRAY.length;
-    elements.statTotalTests.textContent = SCORES_DB.length;
-    elements.statAvgScore.textContent = globalAverages.simulacro.global;
-    elements.statAvgScoreMini.textContent = globalAverages.minisimulacro.global;
-
-    renderSubjectAvgChart(globalAverages.simulacro);
-    renderScoreDistChart(SCORES_DB.filter(s => (TEST_INDEX[s.test_id]?.type || 'simulacro') === 'simulacro'));
-    
-    currentAdminPage = 1;
-    renderAdminTable();
-}
-
-// (MODIFICADO) Renderiza la tabla de admin con datos de STUDENT_DB
-function renderAdminTable() {
-    if (!elements.adminTableBody) return;
-
-    // 1. Filtrar
-    const filterText = currentAdminFilter.toLowerCase().trim();
-    const filteredStudents = ALL_STUDENTS_ARRAY.filter(student => {
-        if (!filterText) return true;
-        return ( (student.full_name || '').toLowerCase().includes(filterText) ||
-               (student.email || '').toLowerCase().includes(filterText) ||
-               (student.doc_number || '').toLowerCase().includes(filterText) );
-    });
-
-    // 2. Ordenar
-    const key = currentAdminSort.key;
-    const direction = currentAdminSort.direction === 'asc' ? 1 : -1;
-    
-    const sortedStudents = [...filteredStudents].sort((a, b) => {
-        let valA = a[key];
-        let valB = b[key];
+/**
+ * Carga todos los datos iniciales (estudiantes, puntajes, índice)
+ * @param {boolean} force - Si es true, fuerza la recarga de los CSV
+ */
+async function loadAllData(force = false) {
+    showLoading(true, 'Cargando datos maestros...');
+    try {
+        // Cargar el índice de pruebas primero (siempre desde la red)
+        elements.loadingText.textContent = 'Cargando índice de pruebas...';
+        const indexResponse = await fetch(URLS.testIndex);
+        if (!indexResponse.ok) throw new Error(`No se pudo cargar ${URLS.testIndex}`);
+        TEST_INDEX = await indexResponse.json();
         
-        if (key === 'birth_date') {
-            const parseDate = (dateStr) => {
-                if (!dateStr) return 0;
-                const parts = dateStr.split('/');
-                if (parts.length === 3) return new Date(parts[2], parts[1] - 1, parts[0]).getTime();
-                return 0;
-            };
-            valA = parseDate(valA);
-            valB = parseDate(valB);
+        // Cargar bases de datos principales (solo si están vacías o se fuerza)
+        if (force || Object.keys(STUDENT_DB).length === 0) {
+            elements.loadingText.textContent = 'Cargando base de datos de estudiantes...';
+            const studentsData = await fetchAndParseCSV(URLS.studentDatabase);
+            // Convertir array a objeto (diccionario) para login rápido
+            STUDENT_DB = {};
+            ALL_STUDENTS_ARRAY = [];
+            for (const student of studentsData) {
+                const docNumber = student['Número de Documento']?.trim();
+                if (docNumber) {
+                    STUDENT_DB[docNumber] = student;
+                    ALL_STUDENTS_ARRAY.push(student);
+                }
+            }
+        }
+        
+        if (force || SCORES_DB.length === 0) {
+            elements.loadingText.textContent = 'Cargando base de datos de puntajes...';
+            SCORES_DB = await fetchAndParseCSV(URLS.scoresDatabase);
         }
 
-        valA = valA ?? (typeof valA === 'number' ? -Infinity : '');
-        valB = valB ?? (typeof valB === 'number' ? -Infinity : '');
-        
-        if (typeof valA === 'string') { return valA.localeCompare(valB, 'es', { sensitivity: 'base' }) * direction; }
-        else if (typeof valA === 'number') { return (valA - valB) * direction; }
-        return 0;
-    });
+        showLoading(false);
+        showSection('login-section');
 
-    // 3. Paginar
-    const totalStudents = sortedStudents.length;
-    const totalPages = Math.ceil(totalStudents / ADMIN_ROWS_PER_PAGE);
-    lastCalculatedTotalPages = totalPages;
-    currentAdminPage = Math.min(Math.max(1, currentAdminPage), totalPages || 1);
-
-    const startIndex = (currentAdminPage - 1) * ADMIN_ROWS_PER_PAGE;
-    const endIndex = startIndex + ADMIN_ROWS_PER_PAGE;
-    const paginatedStudents = sortedStudents.slice(startIndex, endIndex);
-
-    // 4. Renderizar
-    elements.adminTableBody.innerHTML = '';
-    if (paginatedStudents.length === 0) {
-        elements.adminNoResults.classList.remove('hidden');
-    } else {
-        elements.adminNoResults.classList.add('hidden');
-        const rowsHtml = paginatedStudents.map((student) => `
-            <tr class="hover:bg-gray-50">
-                <td class="px-4 py-3 font-medium text-gray-900">${student.full_name || 'N/A'}</td>
-                <td class="px-4 py-3 text-gray-600 truncate max-w-[150px]">${student.email || '-'}</td>
-                <td class="px-4 py-3 text-center text-gray-500">${student.doc_type || '-'}</td>
-                <td class="px-4 py-3 text-gray-600">${student.doc_number || '-'}</td>
-                <td class="px-4 py-3 text-gray-600">${student.birth_date || '-'}</td>
-                <td class="px-4 py-3 text-center font-medium text-brand-secondary">${student.report_count || 0}</td>
-                <td class="px-4 py-3 text-center">
-                     <button class="view-report-btn" data-student-id="${student.doc_number}">Ver</button>
-                </td>
-            </tr>
-        `).join('');
-        elements.adminTableBody.innerHTML = rowsHtml;
+    } catch (error) {
+        console.error('Error fatal al cargar datos:', error);
+        elements.loadingText.textContent = `Error al cargar datos. Revisa la consola y recarga la página. ${error.message}`;
     }
-    
-    // 5. Actualizar Controles de Paginación
-    elements.adminPaginationInfo.textContent = totalStudents > 0 ? `Mostrando ${startIndex + 1}-${Math.min(endIndex, totalStudents)} de ${totalStudents}` : `Mostrando 0-0 de 0`;
-    elements.adminPrevPageBtn.disabled = (currentAdminPage === 1);
-    elements.adminNextPageBtn.disabled = (currentAdminPage === totalPages);
-
-    updateAdminSortIcons();
-}
-   
-function updateAdminSortIcons() {
- document.querySelectorAll('#admin-screen .sortable-header').forEach(header => {
-     const key = header.dataset.sortKey; const icon = header.querySelector('.sort-icon'); if (icon) icon.remove();
-     let iconSvg = '';
-     if (currentAdminSort.key === key) { iconSvg = currentAdminSort.direction === 'asc' ? '<svg class="sort-icon h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" /></svg>' : '<svg class="sort-icon h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>'; }
-     else { iconSvg = '<svg class="sort-icon h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="opacity: 0.3;"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" /></svg>'; }
-     header.insertAdjacentHTML('beforeend', iconSvg);
- });
 }
 
-// (MODIFICADO) Gráficos Admin
-function renderSubjectAvgChart(averageData) {
-   if (subjectAvgChartInstance) subjectAvgChartInstance.destroy();
-   const ctx = elements.subjectAvgChartCanvas?.getContext('2d');
-   if (!ctx) return;
-   subjectAvgChartInstance = new Chart(ctx, {
-       type: 'bar',
-       data: {
-           labels: ['Lectura', 'Matemáticas', 'Sociales', 'Ciencias', 'Inglés'],
-           datasets: [{
-               label: 'Promedio Grupal (Generales)',
-               data: [averageData.lectura, averageData.matematicas, averageData.sociales, averageData.ciencias, averageData.ingles],
-               backgroundColor: [
-                   'rgba(2, 132, 199, 0.7)', 'rgba(220, 38, 38, 0.7)', 'rgba(202, 138, 4, 0.7)',
-                   'rgba(22, 163, 74, 0.7)', 'rgba(147, 51, 234, 0.7)'
-               ],
-               borderColor: ['#0284c7', '#dc2626', '#ca8a04', '#16a34a', '#9333ea'],
-               borderWidth: 1.5, borderRadius: 6, barPercentage: 0.7, categoryPercentage: 0.8
-           }]
-       },
-       options: { /* Opciones de Chart.js (sin cambios) */ }
-   });
- }
-function renderScoreDistChart(scoresData) {
-     if (scoreDistChartInstance) scoreDistChartInstance.destroy();
-     const ctx = elements.scoreDistChartCanvas?.getContext('2d');
-     if (!ctx) return;
-
-     const scoreDistribution = { '0-100': 0, '101-200': 0, '201-300': 0, '301-400': 0, '401-500': 0 };
-     scoresData.forEach(score => {
-        const s = score.puntajeGlobal || 0;
-        if (s <= 100) scoreDistribution['0-100']++;
-        else if (s <= 200) scoreDistribution['101-200']++;
-        else if (s <= 300) scoreDistribution['201-300']++;
-        else if (s <= 400) scoreDistribution['301-400']++;
-        else scoreDistribution['401-500']++;
-     });
-
-     scoreDistChartInstance = new Chart(ctx, {
-         type: 'doughnut',
-         data: {
-             labels: ['0-100', '101-200', '201-300', '301-400', '401-500'],
-             datasets: [{
-                 label: 'Nro. Estudiantes',
-                 data: [
-                    scoreDistribution['0-100'], scoreDistribution['101-200'], scoreDistribution['201-300'],
-                    scoreDistribution['301-400'], scoreDistribution['401-500']
-                 ],
-                 backgroundColor: ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6'],
-                 borderColor: '#ffffff', borderWidth: 2,
-             }]
-         },
-         options: { /* Opciones de Chart.js (sin cambios) */ }
-     });
+/**
+ * Función helper para cargar y parsear archivos CSV usando PapaParse
+ * @param {string} url - La URL del archivo CSV
+ * @returns {Promise<Array>} - Una promesa que resuelve a un array de objetos
+ */
+function fetchAndParseCSV(url) {
+    return new Promise((resolve, reject) => {
+        Papa.parse(url, {
+            download: true,
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+                if (results.errors.length) {
+                    reject(new Error(`Error al parsear ${url}: ${results.errors[0].message}`));
+                } else {
+                    resolve(results.data);
+                }
+            },
+            error: (error) => {
+                reject(new Error(`Error al descargar ${url}: ${error.message}`));
+            }
+        });
+    });
 }
 
-// --- (MODIFICADO) Lógica de Login/Logout ---
+// --- Lógica de Autenticación y Navegación ---
+
 function handleLogin(e) {
     e.preventDefault();
-    const docType = elements.docTypeInput.value;
-    const docNumber = elements.docNumberInput.value.trim();
-    const birthDateInput = elements.birthDateInput.value.trim();
-    const m = birthDateInput.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    const birthDate = m ? `${parseInt(m[1])}/${parseInt(m[2])}/${m[3]}` : birthDateInput;
+    const username = elements.usernameInput.value.trim();
+    const password = elements.passwordInput.value.trim();
 
-    // 1. Check Admin
-    if (docType === "CC" && docNumber === SUPER_USER_CREDENTIALS.username && birthDate === SUPER_USER_CREDENTIALS.password) {
-        sessionStorage.setItem(SESSION_USER_TYPE_KEY, 'admin');
-        sessionStorage.setItem(SESSION_USER_ID_KEY, 'admin');
-        elements.loginError.classList.add('hidden');
-        isAdminViewingReport = false;
-        showAdminView();
+    // 1. Check Admin Login
+    if (username === SUPER_USER_CREDENTIALS.username && password === SUPER_USER_CREDENTIALS.password) {
+        showSection('admin-dashboard-section');
+        showAdminDashboard();
         return;
     }
 
-    if (!docType || !docNumber || !birthDate) {
-        elements.loginError.textContent = 'Por favor, complete todos los campos.';
-        elements.loginError.classList.remove('hidden');
-        return;
-    }
-    
-    // 2. Check Student
-    const studentData = STUDENT_DB[docNumber];
-    const studentDocTypeNormalized = studentData?.doc_type === 'O' ? 'Otro' : studentData?.doc_type;
-    const inputDocTypeNormalized = docType === 'O' ? 'Otro' : docType;
-
-    console.log("Intento Login:", { inputDocType: inputDocTypeNormalized, inputDocNumber: docNumber, inputBirthDate: birthDate, foundDocType: studentDocTypeNormalized, foundBirthDate: studentData?.birth_date });
-
-    if (studentData && studentDocTypeNormalized === inputDocTypeNormalized && studentData.birth_date === birthDate) {
-        // 3. (NUEVO) Encontrar todos los reportes de este estudiante
-        const studentReports = SCORES_DB.filter(score => score.doc_number === docNumber);
-        
-        if (studentReports.length === 0) {
-             elements.loginError.textContent = 'Usuario encontrado, pero no tiene informes disponibles.';
-             elements.loginError.classList.remove('hidden');
-             return;
+    // 2. Check Student Login
+    // Intentar login por email o por documento
+    let studentData = STUDENT_DB[username]; // Intento por Documento
+    if (!studentData) {
+        // Intento por Email
+        const foundStudent = ALL_STUDENTS_ARRAY.find(s => s.Email?.trim().toLowerCase() === username.toLowerCase());
+        if (foundStudent) {
+            studentData = foundStudent;
         }
+    }
 
-        sessionStorage.setItem(SESSION_USER_TYPE_KEY, 'student');
-        sessionStorage.setItem(SESSION_USER_ID_KEY, docNumber);
-        elements.loginError.classList.add('hidden');
-        isAdminViewingReport = false;
-        
-        // (NUEVO) Mostrar pantalla de selección en lugar de informe directo
-        showSelectionScreen(studentData, studentReports);
-
+    // Validar contraseña (Número de Documento)
+    if (studentData && studentData['Número de Documento']?.trim() === password) {
+        CURRENT_STUDENT_DATA = studentData;
+        CURRENT_STUDENT_REPORTS = SCORES_DB.filter(score => score.doc_number === password);
+        showSection('student-dashboard-section');
+        showStudentDashboard();
     } else {
-        elements.loginError.textContent = 'Datos incorrectos o no encontrados. Verifique.';
-        elements.loginError.classList.remove('hidden');
+        elements.loginError.textContent = 'Usuario o contraseña incorrectos.';
+        elements.loginError.style.display = 'block';
     }
 }
 
 function handleLogout() {
-     sessionStorage.removeItem(SESSION_USER_TYPE_KEY);
-     sessionStorage.removeItem(SESSION_USER_ID_KEY);
-     
-     // Limpiar variables de estado
-     CURRENT_STUDENT_DATA = null;
-     CURRENT_STUDENT_REPORTS = [];
-     
-     elements.docTypeInput.value = '';
-     elements.docNumberInput.value = '';
-     elements.birthDateInput.value = '';
-     if (birthDatePicker) birthDatePicker.clear();
-     
-     elements.loginError.classList.add('hidden');
-     elements.reportScreen.classList.add('hidden');
-     elements.adminScreen.classList.add('hidden');
-     elements.selectionScreen.classList.add('hidden'); // (NUEVO) Ocultar selección
-     
-     elements.individualReportContent.innerHTML = '';
-     elements.detailedFeedbackSection.innerHTML = '';
-     if (elements.adminTableBody) elements.adminTableBody.innerHTML = '';
-     
-     isAdminViewingReport = false;
-     elements.loginScreen.classList.remove('hidden');
-     elements.body.classList.remove('overflow-hidden');
-     window.scrollTo(0, 0);
-     
-     // (NUEVO) Cerrar todos los modales
-     closeModal(elements.adminModalBackdrop);
-     closeModal(elements.growthChartModalBackdrop);
-}
-
-// --- (NUEVO) Lógica de Modales Genérica ---
-function openModal(modalBackdrop) {
-    if (!modalBackdrop) return;
-    modalBackdrop.style.display = 'flex';
-    setTimeout(() => {
-        modalBackdrop.classList.add('shown');
-        elements.body.classList.add('overflow-hidden');
-    }, 10);
-}
-
-function closeModal(modalBackdrop) {
-    if (!modalBackdrop) return;
-    modalBackdrop.classList.remove('shown');
-    setTimeout(() => {
-        modalBackdrop.style.display = 'none';
-        elements.body.classList.remove('overflow-hidden');
-        // Limpiar contenido de modales al cerrar
-        const modalBody = modalBackdrop.querySelector('.modal-body');
-        if (modalBody) modalBody.innerHTML = '';
-    }, 250);
-}
-
-// (NUEVO) Lógica para Gráfica de Crecimiento
-function showGrowthChart() {
-    openModal(elements.growthChartModalBackdrop);
+    // Limpiar estado
+    CURRENT_STUDENT_DATA = null;
+    CURRENT_STUDENT_REPORTS = [];
+    adminFilteredData = [];
+    currentAdminPage = 1;
+    isAdminViewingReport = false;
     
-    // Filtrar por tipo
-    const simulacroReports = [];
-    const minisimulacroReports = [];
+    // Limpiar inputs
+    elements.usernameInput.value = '';
+    elements.passwordInput.value = '';
+    elements.loginError.style.display = 'none';
+    
+    // Mostrar login
+    showSection('login-section');
+}
 
-    CURRENT_STUDENT_REPORTS.forEach(report => {
-        const type = TEST_INDEX[report.test_id]?.type || 'simulacro';
-        const dataPoint = {
-            x: new Date(report.test_date).getTime(), // Usar timestamp para el eje X
-            y: report.puntajeGlobal
-        };
-        if (type === 'minisimulacro') {
-            minisimulacroReports.push(dataPoint);
-        } else {
-            simulacroReports.push(dataPoint);
+/**
+ * Muestra una sección principal y oculta las demás
+ * @param {string} sectionId - ID de la sección a mostrar
+ */
+function showSection(sectionId) {
+    const sections = [
+        elements.loginSection,
+        elements.loadingSection,
+        elements.studentDashboard,
+        elements.adminDashboard,
+        elements.reportContentSection
+    ];
+    sections.forEach(section => {
+        if (section) {
+            section.style.display = section.id === sectionId ? 'block' : 'none';
         }
     });
+    // Mostrar/Ocultar botón de logout
+    elements.logoutBtn.style.display = (sectionId !== 'login-section' && sectionId !== 'loading-section') ? 'block' : 'none';
+}
 
-    // Ordenar por fecha (eje x)
-    simulacroReports.sort((a, b) => a.x - b.x);
-    minisimulacroReports.sort((a, b) => a.x - b.x);
-
-    // Renderizar Gráfica 1 (Simulacros)
-    const ctxSimulacro = document.getElementById('growth-chart-simulacro')?.getContext('2d');
-    if (ctxSimulacro) {
-        if (growthChartSimulacroInstance) growthChartSimulacroInstance.destroy();
-        growthChartSimulacroInstance = new Chart(ctxSimulacro, createChartConfig(simulacroReports));
-    }
-    
-    // Renderizar Gráfica 2 (Minisimulacros)
-    const ctxMini = document.getElementById('growth-chart-minisimulacro')?.getContext('2d');
-    if (ctxMini) {
-        if (growthChartMinisimulacroInstance) growthChartMinisimulacroInstance.destroy();
-        growthChartMinisimulacroInstance = new Chart(ctxMini, createChartConfig(minisimulacroReports));
+function showLoading(show, text = 'Cargando...') {
+    if (show) {
+        elements.loadingText.textContent = text;
+        showSection('loading-section');
+    } else {
+        showSection('login-section'); // Oculta el loading y vuelve al login por defecto
     }
 }
 
-function createChartConfig(data) {
-    return {
+function showDashboard() {
+    // Limpiar contenido del informe
+    elements.reportContentBody.innerHTML = '';
+    
+    // Destruir gráficos si existen
+    if (window.myRadarChart instanceof Chart) {
+        window.myRadarChart.destroy();
+    }
+    
+    if (isAdminViewingReport) {
+        showSection('admin-dashboard-section');
+        showAdminDashboard(); // Vuelve al panel de admin
+    } else {
+        showSection('student-dashboard-section');
+        showStudentDashboard(); // Vuelve al panel de estudiante
+    }
+}
+
+
+// --- Lógica de Dashboard de Estudiante ---
+
+function showStudentDashboard() {
+    if (!CURRENT_STUDENT_DATA) return;
+    
+    elements.studentName.textContent = CURRENT_STUDENT_DATA['Nombre Completo del Estudiante'];
+    elements.reportCardsContainer.innerHTML = ''; // Limpiar tarjetas
+
+    if (CURRENT_STUDENT_REPORTS.length === 0) {
+        elements.reportCardsContainer.innerHTML = '<p class="text-gray-600">No tienes informes disponibles.</p>';
+        
+        // Destruir gráfico si no hay datos
+        if (window.myGrowthChart instanceof Chart) {
+            window.myGrowthChart.destroy();
+        }
+        return;
+    }
+    
+    // Ordenar reportes por fecha
+    const sortedReports = [...CURRENT_STUDENT_REPORTS].sort((a, b) => new Date(b.test_date) - new Date(a.test_date));
+
+    // 1. Renderizar tarjetas de informes
+    sortedReports.forEach(report => {
+        const testId = report.test_id;
+        const testInfo = TEST_INDEX[testId];
+        if (!testInfo) return; // Omitir si la prueba no está en el índice
+
+        const card = document.createElement('div');
+        card.className = "bg-brand-surface p-6 rounded-xl shadow-sm border border-brand-border cursor-pointer hover:shadow-md hover:border-brand-secondary transition-all";
+        card.dataset.testid = testId;
+        card.innerHTML = `
+            <h4 class="text-xl font-bold text-brand-header mb-2">${testInfo.name}</h4>
+            <p class="text-sm text-gray-500 mb-4">Fecha: ${new Date(report.test_date).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            <div class="flex items-center justify-between">
+                <span class="text-3xl font-extrabold text-brand-secondary">${report.global_score}</span>
+                <span class="text-sm font-medium text-gray-500">Puntaje Global</span>
+            </div>
+            <div class="mt-4 pt-4 border-t border-brand-border grid grid-cols-5 gap-2 text-center">
+                <div><span class="font-bold text-xs text-matematicas">MAT</span><p class="font-bold text-lg text-matematicas">${report.mat_score}</p></div>
+                <div><span class="font-bold text-xs text-lectura">LEC</span><p class="font-bold text-lg text-lectura">${report.lec_score}</p></div>
+                <div><span class="font-bold text-xs text-sociales">SOC</span><p class="font-bold text-lg text-sociales">${report.soc_score}</p></div>
+                <div><span class="font-bold text-xs text-ciencias">CIE</span><p class="font-bold text-lg text-ciencias">${report.cie_score}</p></div>
+                <div><span class="font-bold text-xs text-ingles">ING</span><p class="font-bold text-lg text-ingles">${report.ing_score}</p></div>
+            </div>
+        `;
+        card.addEventListener('click', () => showIndividualReport(testId));
+        elements.reportCardsContainer.appendChild(card);
+    });
+
+    // 2. Renderizar gráfico de progreso
+    // Iniciar con el filtro "all"
+    renderGrowthChart(sortedReports, 'all'); 
+    // Asegurar que el botón "all" esté activo
+    elements.growthChartFilters.querySelectorAll('.chart-filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === 'all');
+    });
+}
+
+// ======================================================
+// INICIO: MEJORA 2 - Función de Gráfico de Progreso (Modificada)
+// ======================================================
+/**
+ * Renderiza la gráfica de crecimiento del estudiante.
+ * @param {Array} studentReports - Array de reportes del estudiante (de SCORES_DB)
+ * @param {string} filterType - 'all', 'simulacro', o 'minisimulacro'
+ */
+function renderGrowthChart(studentReports, filterType = 'all') {
+    const ctx = document.getElementById('growthChart')?.getContext('2d');
+    if (!ctx) return;
+
+    // 3. DESTRUIR GRÁFICO ANTERIOR
+    if (window.myGrowthChart instanceof Chart) {
+        window.myGrowthChart.destroy();
+    }
+
+    // 1. FILTRAR DATOS
+    const filteredReports = studentReports
+        .filter(report => {
+            // Necesitamos el tipo de prueba desde TEST_INDEX
+            const testType = TEST_INDEX[report.test_id]?.type;
+            if (filterType === 'all') {
+                return true; // Mostrar todos
+            }
+            return testType === filterType; // Mostrar solo el tipo seleccionado
+        })
+        .sort((a, b) => new Date(a.test_date) - new Date(b.test_date)); // Asegurar orden cronológico
+
+    // 2. PREPARAR DATOS PARA CHART.JS
+    const chartData = filteredReports.map(report => ({
+        x: new Date(report.test_date), // Eje X es la fecha
+        y: parseInt(report.global_score) // Eje Y es el puntaje
+    }));
+
+    // 4. RENDERIZAR NUEVO GRÁFICO
+    window.myGrowthChart = new Chart(ctx, {
         type: 'line',
         data: {
             datasets: [{
-                label: 'Puntaje Global',
-                data: data,
+                label: 'Puntaje Global (0-500)',
+                data: chartData,
                 borderColor: 'var(--brand-primary)',
                 backgroundColor: 'rgba(249, 115, 22, 0.1)',
                 fill: true,
-                tension: 0.1, // Línea ligeramente curvada
-                borderWidth: 2,
-                pointRadius: 4,
+                tension: 0.1,
+                borderWidth: 3,
+                pointRadius: 5,
                 pointBackgroundColor: 'var(--brand-primary)',
+                pointBorderColor: 'var(--brand-surface)',
             }]
         },
         options: {
@@ -1302,269 +701,921 @@ function createChartConfig(data) {
                     type: 'time',
                     time: {
                         unit: 'month',
-                        tooltipFormat: 'dd MMM yyyy', // Formato de tooltip
+                        tooltipFormat: 'dd MMM yyyy',
                         displayFormats: {
-                            month: 'MMM yyyy' // Formato en el eje X
+                            month: 'MMM yyyy'
                         }
                     },
-                    grid: { display: false },
-                    title: { display: true, text: 'Fecha de Prueba' }
+                    title: {
+                        display: true,
+                        text: 'Fecha'
+                    },
+                    grid: {
+                        display: false
+                    }
                 },
                 y: {
-                    beginAtZero: false,
+                    beginAtZero: false, // Empezar cerca del puntaje más bajo
+                    min: 100,
                     max: 500,
-                    min: Math.min(150, ...data.map(d => d.y)) - 20, // Ajustar mínimo
-                    grid: { color: '#e5e7eb' },
-                    title: { display: true, text: 'Puntaje Global' }
+                    title: {
+                        display: true,
+                        text: 'Puntaje Global'
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.05)'
+                    }
                 }
             },
             plugins: {
-                legend: { display: false },
                 tooltip: {
-                    backgroundColor: '#1f2937',
-                    titleFont: { weight: 'bold' },
-                    bodyFont: { size: 12 },
-                    padding: 10,
-                    cornerRadius: 4,
-                    displayColors: false,
+                    mode: 'index',
+                    intersect: false,
                     callbacks: {
-                        title: (tooltipItems) => {
+                        title: function(context) {
                             // Formatear la fecha en el tooltip
-                            return formatTestDate(tooltipItems[0].parsed.x);
+                            return new Date(context[0].parsed.x).toLocaleDateString('es-CO', {
+                                day: 'numeric',
+                                month: 'long',
+                                year: 'numeric'
+                            });
+                        },
+                        label: function(context) {
+                            // Mostrar el nombre de la prueba en el tooltip
+                            const reportIndex = context.dataIndex;
+                            const testId = filteredReports[reportIndex].test_id;
+                            const testName = TEST_INDEX[testId]?.name || 'Prueba';
+                            return `${testName}: ${context.parsed.y}`;
                         }
                     }
+                },
+                legend: {
+                    display: false
                 }
             }
         }
-    };
+    });
+}
+// ======================================================
+// FIN: MEJORA 2 - Función de Gráfico de Progreso
+// ======================================================
+
+
+// --- Lógica de Dashboard de Administrador ---
+
+function showAdminDashboard() {
+    renderAdminTable();
+
+    // ======================================================
+    // INICIO: MEJORA 1 - Poblar selector de pruebas
+    // ======================================================
+    if (elements.statsTestSelect) {
+        elements.statsTestSelect.innerHTML = '<option value="">Seleccione una prueba</option>';
+        for (const testId in TEST_INDEX) {
+            const testName = TEST_INDEX[testId].name;
+            elements.statsTestSelect.innerHTML += `<option value="${testId}">${testName}</option>`;
+        }
+    }
+    // ======================================================
+    // FIN: MEJORA 1 - Poblar selector de pruebas
+    // ======================================================
 }
 
+function renderAdminTable() {
+    if (!elements.adminTableBody) return;
 
-// --- (NUEVO) Lógica para Admin Modal
-async function showAdminStudentHistory(studentId) {
-    const studentData = STUDENT_DB[studentId];
-    if (!studentData) return;
+    // 1. Filtrar
+    const searchTerm = elements.adminSearch.value.toLowerCase();
+    adminFilteredData = ALL_STUDENTS_ARRAY.filter(student => {
+        const name = student['Nombre Completo del Estudiante']?.toLowerCase() || '';
+        const doc = student['Número de Documento']?.toLowerCase() || '';
+        return name.includes(searchTerm) || doc.includes(searchTerm);
+    });
 
-    const studentReports = SCORES_DB.filter(score => score.doc_number === studentId)
-                                    .sort((a, b) => new Date(b.test_date) - new Date(a.test_date));
+    // 2. Ordenar
+    adminFilteredData.sort((a, b) => {
+        const valA = a[currentAdminSort.column] || '';
+        const valB = b[currentAdminSort.column] || '';
+        if (valA < valB) return currentAdminSort.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return currentAdminSort.direction === 'asc' ? 1 : -1;
+        return 0;
+    });
 
-    elements.adminModalHeader.textContent = `Historial: ${studentData.full_name}`;
-    openModal(elements.adminModalBackdrop);
-    elements.adminModalBody.innerHTML = '<p class="text-center text-gray-500 p-4">Cargando historial...</p>';
+    // 3. Paginar
+    const totalPages = Math.ceil(adminFilteredData.length / adminRowsPerPage);
+    const start = (currentAdminPage - 1) * adminRowsPerPage;
+    const end = start + adminRowsPerPage;
+    const paginatedData = adminFilteredData.slice(start, end);
 
-    if (studentReports.length === 0) {
-        elements.adminModalBody.innerHTML = '<p class="text-center text-gray-500 p-4">Este estudiante no tiene informes registrados.</p>';
-        return;
+    // 4. Renderizar
+    elements.adminTableBody.innerHTML = '';
+    if (paginatedData.length === 0) {
+        elements.adminTableBody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500">No se encontraron estudiantes.</td></tr>`;
+    } else {
+        paginatedData.forEach(student => {
+            const docNumber = student['Número de Documento'];
+            const row = document.createElement('tr');
+            row.className = "hover:bg-gray-50";
+            row.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm font-medium text-brand-header">${student['Nombre Completo del Estudiante']}</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm text-brand-text">${student['Email']}</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm text-brand-text">${student['Tipo de Documento']} ${student['Número de Documento']}</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm text-brand-text">${student['Colegio/institución']}</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <button class="view-report-btn text-brand-secondary hover:text-brand-blue-dark" data-student-id="${docNumber}">
+                        Ver Informes
+                    </button>
+                </td>
+            `;
+            elements.adminTableBody.appendChild(row);
+        });
     }
 
-    const reportCardsHtml = studentReports.map(report => {
-        const testInfo = TEST_INDEX[report.test_id] || {};
-        return `
-            <div class="report-card admin-report-card" data-testid="${report.test_id}" data-doc-number="${studentId}">
-                <div class="report-card-info">
-                    <span class="report-card-title">${testInfo.name || report.test_id}</span>
-                    <span class="report-card-date">${formatTestDate(report.test_date)}</span>
-                </div>
-                <div class="report-card-score">
-                    <span class="report-card-global">${report.puntajeGlobal}</span>
-                    <span class="report-card-label">GLOBAL</span>
+    // 5. Actualizar info de paginación
+    elements.adminPageInfo.textContent = `Mostrando ${start + 1}-${Math.min(end, adminFilteredData.length)} de ${adminFilteredData.length}`;
+    elements.adminPrevPage.disabled = currentAdminPage === 1;
+    elements.adminNextPage.disabled = currentAdminPage === totalPages;
+}
+
+function showAdminStudentHistory(studentId) {
+    const student = STUDENT_DB[studentId];
+    if (!student) return;
+
+    const studentReports = SCORES_DB.filter(score => score.doc_number === studentId)
+                                   .sort((a, b) => new Date(b.test_date) - new Date(a.test_date));
+
+    elements.adminModalHeader.textContent = `Historial de: ${student['Nombre Completo del Estudiante']}`;
+    elements.adminModalBody.innerHTML = ''; // Limpiar
+
+    if (studentReports.length === 0) {
+        elements.adminModalBody.innerHTML = '<p class="text-gray-600">Este estudiante no tiene informes disponibles.</p>';
+        openModal(elements.adminModalBackdrop);
+        return;
+    }
+    
+    // Renderizar tarjetas de informes (versión admin)
+    const cardsGrid = document.createElement('div');
+    cardsGrid.className = "grid grid-cols-1 md:grid-cols-2 gap-4";
+
+    studentReports.forEach(report => {
+        const testId = report.test_id;
+        const testInfo = TEST_INDEX[testId];
+        if (!testInfo) return;
+
+        cardsGrid.innerHTML += `
+            <div class="admin-report-card bg-brand-surface p-4 rounded-lg shadow-sm border border-brand-border cursor-pointer hover:border-brand-secondary" data-testid="${testId}" data-doc-number="${studentId}">
+                <h5 class="font-bold text-brand-header">${testInfo.name}</h5>
+                <p class="text-sm text-gray-500 mb-3">Fecha: ${new Date(report.test_date).toLocaleDateString('es-CO')}</p>
+                <div class="flex items-center justify-between">
+                    <span class="text-2xl font-bold text-brand-secondary">${report.global_score}</span>
+                    <span class="text-sm font-medium text-gray-500">Puntaje Global</span>
                 </div>
             </div>
         `;
-    }).join('<div class="my-3"></div>'); // Separador
-
-    elements.adminModalBody.innerHTML = reportCardsHtml;
+    });
+    
+    elements.adminModalBody.appendChild(cardsGrid);
+    openModal(elements.adminModalBackdrop);
 }
 
 
-// --- INICIALIZACIÓN ---
-document.addEventListener('DOMContentLoaded', async () => {
-    console.log("DOM Cargado. Inicializando v3...");
+// --- Lógica de Informe Individual ---
+
+/**
+ * Carga los datos de UNA prueba (claves, respuestas, videos) si no están cacheados
+ * @param {string} testId - El ID de la prueba (ej. "sg11_07")
+ */
+async function loadTestSpecificData(testId) {
+    if (CACHED_TEST_DATA[testId]) {
+        return CACHED_TEST_DATA[testId];
+    }
     
-    // (NUEVO) Referencias a todos los elementos
-    elements = {
-        loginScreen: document.getElementById('login-screen'),
-        selectionScreen: document.getElementById('selection-screen'),
-        reportScreen: document.getElementById('report-screen'),
-        adminScreen: document.getElementById('admin-screen'),
+    const testInfo = TEST_INDEX[testId];
+    if (!testInfo) throw new Error(`No se encontró la prueba ${testId} en el índice.`);
+
+    showLoading(true, `Cargando datos del informe ${testInfo.name}...`);
+    
+    try {
+        const testData = {
+            keys: {},
+            answers: {},
+            videos: {}
+        };
+
+        // Función helper para cargar y parsear
+        const loadAndParse = async (url) => {
+            if (!url) return null;
+            const fullUrl = `${BASE_DATA_URL}${url}?t=${TIMESTAMP}`;
+            return await fetchAndParseCSV(fullUrl);
+        };
         
-        loginForm: document.getElementById('login-form'),
-        docTypeInput: document.getElementById('doc-type'),
-        docNumberInput: document.getElementById('document-number'),
-        birthDateInput: document.getElementById('birth-date'),
-        loginError: document.getElementById('login-error'),
+        // ======================================================
+        // INICIO: LÓGICA POLIMÓRFICA (Simulacro vs Minisimulacro)
+        // ======================================================
+        let keysData = [];
+        let answersData = [];
         
-        studentNameHeaderSelection: document.getElementById('student-name-header-selection'),
-        logoutBtnSelection: document.getElementById('logout-btn-selection'),
-        viewGrowthChartBtn: document.getElementById('view-growth-chart-btn'),
-        reportListContainer: document.getElementById('report-list-container'),
-
-        studentNameHeader: document.getElementById('student-name-header'),
-        reportTitleHeader: document.getElementById('report-title-header'),
-        individualReportContent: document.getElementById('individual-report-content'),
-        detailedFeedbackSection: document.getElementById('detailed-feedback-section'),
-        globalScoreNumber: document.getElementById('global-score-number'),
-        
-        logoutBtnReport: document.getElementById('logout-btn-report'),
-        backToAdminBtn: document.getElementById('back-to-admin-btn'),
-        backToSelectionBtn: document.getElementById('back-to-selection-btn'),
-        logoutBtnAdmin: document.getElementById('logout-btn-admin'),
-        
-        body: document.body,
-        
-        adminTableBody: document.getElementById('admin-table-body'),
-        adminSearchInput: document.getElementById('admin-search'),
-        adminTable: document.getElementById('admin-table'),
-        adminNoResults: document.getElementById('admin-no-results'),
-        adminPaginationInfo: document.getElementById('admin-pagination-info'),
-        adminPrevPageBtn: document.getElementById('admin-prev-page'),
-        adminNextPageBtn: document.getElementById('admin-next-page'),
-        
-        adminModalBackdrop: document.getElementById('admin-modal-backdrop'),
-        adminModalHeader: document.getElementById('admin-modal-header'),
-        adminModalBody: document.getElementById('admin-modal-body'),
-        adminModalCloseBtn: document.getElementById('admin-modal-close-btn'),
-        
-        growthChartModalBackdrop: document.getElementById('growth-chart-modal-backdrop'),
-        growthChartModalCloseBtn: document.getElementById('growth-chart-modal-close-btn'),
-
-        statTotalStudents: document.getElementById('stat-total-students'),
-        statAvgScore: document.getElementById('stat-avg-score'),
-        statAvgScoreMini: document.getElementById('stat-avg-score-mini'),
-        statTotalTests: document.getElementById('stat-total-tests'),
-        
-        subjectAvgChartCanvas: document.getElementById('subject-avg-chart'),
-        scoreDistChartCanvas: document.getElementById('score-dist-chart'),
-     };
-
-     // Inicializar Flatpickr
-     birthDatePicker = flatpickr(elements.birthDateInput, { locale: "es", dateFormat: "d/m/Y", allowInput: true, disableMobile: "true" });
-     elements.birthDateInput.addEventListener('input', (e) => {
-         let value = e.target.value.replace(/\D/g, '');
-         if (value.length > 2) { value = value.substring(0, 2) + '/' + value.substring(2); }
-         if (value.length > 5) { value = value.substring(0, 5) + '/' + value.substring(5, 9); }
-         e.target.value = value;
-     });
-
-     // Cargar TODOS los datos maestros primero
-     await loadAllData();
-
-     // (NUEVO) Revisar sesión
-     const savedUserType = sessionStorage.getItem(SESSION_USER_TYPE_KEY);
-     const savedUserId = sessionStorage.getItem(SESSION_USER_ID_KEY);
-     
-     if (savedUserType === 'admin' && savedUserId === 'admin') {
-         isAdminViewingReport = false;
-         showAdminView(true);
-     } else if (savedUserType === 'student') {
-         const studentData = STUDENT_DB[savedUserId];
-         const studentReports = SCORES_DB.filter(score => score.doc_number === savedUserId);
-         if (studentData && studentReports.length > 0) {
-            isAdminViewingReport = false;
-            // (NUEVO) Restaurar a la pantalla de selección
-            showSelectionScreen(studentData, studentReports);
-         } else {
-            console.warn("Estudiante en sesión no encontrado o sin informes.");
-            handleLogout();
-         }
-     } else {
-         elements.loginScreen.classList.remove('hidden');
-     }
-
-     // --- Listeners Principales ---
-     elements.loginForm?.addEventListener('submit', handleLogin);
-     elements.logoutBtnSelection?.addEventListener('click', handleLogout);
-     elements.logoutBtnReport?.addEventListener('click', handleLogout);
-     elements.logoutBtnAdmin?.addEventListener('click', handleLogout);
-     
-     elements.backToSelectionBtn?.addEventListener('click', handleBackToSelection);
-     elements.backToAdminBtn?.addEventListener('click', () => { /* (Lógica Admin Modal) */ }); // Se maneja en el modal
-     
-     // --- Listeners de Modales ---
-     elements.adminModalCloseBtn?.addEventListener('click', () => closeModal(elements.adminModalBackdrop));
-     elements.adminModalBackdrop?.addEventListener('click', (e) => { if (e.target === elements.adminModalBackdrop) closeModal(elements.adminModalBackdrop); });
-     
-     elements.growthChartModalCloseBtn?.addEventListener('click', () => closeModal(elements.growthChartModalBackdrop));
-     elements.growthChartModalBackdrop?.addEventListener('click', (e) => { if (e.target === elements.growthChartModalBackdrop) closeModal(elements.growthChartModalBackdrop); });
-
-     // --- Listeners Específicos de Pantalla ---
-
-     // (NUEVO) Click en un informe de la lista
-     elements.reportListContainer?.addEventListener('click', (e) => {
-         const card = e.target.closest('.report-card');
-         if (card && card.dataset.testid) {
-             showIndividualReport(card.dataset.testid);
-         }
-     });
-
-     // (NUEVO) Click en "Ver Línea de Crecimiento"
-     elements.viewGrowthChartBtn?.addEventListener('click', showGrowthChart);
-     
-     // --- Listeners de Admin ---
-     elements.adminSearchInput?.addEventListener('input', (e) => {
-         currentAdminFilter = e.target.value;
-         currentAdminPage = 1;
-         renderAdminTable();
-     });
-
-     elements.adminPrevPageBtn?.addEventListener('click', () => {
-         if (currentAdminPage > 1) {
-             currentAdminPage--;
-             renderAdminTable();
-         }
-     });
-
-     elements.adminNextPageBtn?.addEventListener('click', () => {
-         if (currentAdminPage < lastCalculatedTotalPages) {
-             currentAdminPage++;
-             renderAdminTable();
-         }
-     });
-
-     // Click en Headers de tabla Admin
-     elements.adminTable?.querySelector('thead')?.addEventListener('click', (e) => {
-         const header = e.target.closest('.sortable-header'); if (!header) return; const key = header.dataset.sortKey; if (!key) return;
-         if (currentAdminSort.key === key) {
-             currentAdminSort.direction = currentAdminSort.direction === 'asc' ? 'desc' : 'asc';
-         } else {
-             currentAdminSort.key = key;
-             currentAdminSort.direction = 'asc'; // Siempre asc por defecto
-         }
-         currentAdminPage = 1;
-         renderAdminTable();
-     });
-     
-     // Click en "Ver" en la tabla de Admin
-     elements.adminTableBody?.addEventListener('click', (e) => {
-         const viewButton = e.target.closest('.view-report-btn');
-         if (viewButton) {
-             const studentId = viewButton.dataset.studentId;
-             showAdminStudentHistory(studentId);
-         }
-     });
-
-     // (NUEVO) Click en un informe DENTRO del modal de admin
-     elements.adminModalBody?.addEventListener('click', async (e) => {
-        const card = e.target.closest('.admin-report-card');
-        if (card && card.dataset.testid) {
-            const testId = card.dataset.testid;
-            const docNumber = card.dataset.docNumber;
-
-            // Simular el estado de "estudiante" para mostrar el informe
-            CURRENT_STUDENT_DATA = STUDENT_DB[docNumber];
-            CURRENT_STUDENT_REPORTS = SCORES_DB.filter(score => score.doc_number === docNumber);
-            isAdminViewingReport = true; // Poner bandera de admin
-
-            closeModal(elements.adminModalBackdrop); // Cerrar modal de admin
+        if (testInfo.type === 'simulacro') {
+            // Simulacro: Cargar S1 y S2
+            elements.loadingText.textContent = 'Cargando claves (S1)...';
+            const keysS1 = await loadAndParse(testInfo.keys_s1);
+            elements.loadingText.textContent = 'Cargando claves (S2)...';
+            const keysS2 = await loadAndParse(testInfo.keys_s2);
             
-            // Mostrar el informe (la función se encargará del resto)
-            await showIndividualReport(testId); 
+            elements.loadingText.textContent = 'Cargando respuestas (S1)...';
+            const answersS1 = await loadAndParse(testInfo.answers_s1);
+            elements.loadingText.textContent = 'Cargando respuestas (S2)...';
+            const answersS2 = await loadAndParse(testInfo.answers_s2);
 
-            // Limpiar estado
-            isAdminViewingReport = false;
-            CURRENT_STUDENT_DATA = null;
-            CURRENT_STUDENT_REPORTS = [];
+            // Combinar datos
+            keysData = [...(keysS1 || []), ...(keysS2 || [])];
+            answersData = [...(answersS1 || []), ...(answersS2 || [])];
+            
+        } else {
+            // Minisimulacro: Cargar singular
+            elements.loadingText.textContent = 'Cargando claves...';
+            keysData = await loadAndParse(testInfo.keys);
+            elements.loadingText.textContent = 'Cargando respuestas...';
+            answersData = await loadAndParse(testInfo.answers);
         }
-     });
-});
+        // ======================================================
+        // FIN: LÓGICA POLIMÓRFICA
+        // ======================================================
 
+        // Procesar claves (1 fila de datos)
+        if (keysData && keysData.length > 0) {
+            // Combinar todas las claves en un solo objeto (para S1 y S2)
+            testData.keys = keysData.reduce((acc, obj) => ({...acc, ...obj}), {});
+        }
+
+        // Procesar respuestas (múltiples filas)
+        const docNumber = CURRENT_STUDENT_DATA['Número de Documento'];
+        const studentAnswers = answersData.find(row => 
+            row.ID === docNumber || // (Compatibilidad con formato antiguo)
+            row['Número de Documento'] === docNumber ||
+            row['Documento'] === docNumber
+        );
+        if (studentAnswers) {
+            testData.answers = studentAnswers;
+        }
+
+        // Cargar base de datos de videos (formato TXT especial)
+        elements.loadingText.textContent = 'Cargando retroalimentación...';
+        if(testInfo.videos) {
+            const videoUrl = `${BASE_DATA_URL}${testInfo.videos}?t=${TIMESTAMP}`;
+            const videoResponse = await fetch(videoUrl);
+            if (videoResponse.ok) {
+                const videoTxt = await videoResponse.text();
+                testData.videos = parseVideoFeedback(videoTxt);
+            }
+        } // else: no hay videos, testData.videos queda como {}
+
+        CACHED_TEST_DATA[testId] = testData;
+        showLoading(false);
+        return testData;
+
+    } catch (error) {
+        console.error(`Error cargando datos para ${testId}:`, error);
+        showLoading(false);
+        showModalAlert(`Error al cargar los datos del informe: ${error.message}`);
+        showDashboard(); // Volver al dashboard
+        return null;
+    }
+}
+
+/**
+ * Parsea el formato TXT de la base de datos de videos
+ * @param {string} txtData - El contenido del archivo bd_retro_...txt
+ * @returns {Object} - Un objeto estructurado con los videos
+ */
+function parseVideoFeedback(txtData) {
+    const feedback = {};
+    const lines = txtData.split('\n');
+    let currentMateria = '';
+    let currentNivel = '';
+
+    lines.forEach(line => {
+        line = line.trim();
+        if (line.startsWith('***')) {
+            // Es una materia (ej. ***MATEMATICAS***)
+            currentMateria = line.replace(/\*/g, '').trim().toUpperCase();
+            feedback[currentMateria] = {};
+        } else if (line.startsWith('**')) {
+            // Es un nivel (ej. **BAJO** o **BÁSICO 10-40**)
+            // Extraer el nombre del nivel (ej. BAJO)
+            currentNivel = line.match(/\*\*(.*?)(?:\s|$)/)[1].trim().toUpperCase();
+            feedback[currentMateria][currentNivel] = [];
+        } else if (line.startsWith('*')) {
+            // Es un video (ej. *[VIDEO 1] | [TÍTULO] | [URL] | [MINIATURA])
+            const parts = line.substring(1).split('|').map(s => s.trim());
+            if (parts.length >= 4) {
+                feedback[currentMateria][currentNivel].push({
+                    id: parts[0],
+                    title: parts[1],
+                    url: parts[2],
+                    thumbnail: parts[3]
+                });
+            }
+        }
+    });
+    return feedback;
+}
+
+/**
+ * Muestra el informe individual para una prueba
+ * @param {string} testId - El ID de la prueba (ej. "sg11_07")
+ */
+async function showIndividualReport(testId) {
+    const testData = await loadTestSpecificData(testId);
+    if (!testData) return; // Error al cargar
+
+    const report = CURRENT_STUDENT_REPORTS.find(r => r.test_id === testId);
+    if (!report) {
+        showModalAlert('No se encontró el puntaje para este informe.');
+        showDashboard();
+        return;
+    }
+    
+    const testInfo = TEST_INDEX[testId];
+    elements.reportContentBody.innerHTML = ''; // Limpiar contenido anterior
+    showSection('report-content-section');
+
+    // 1. Crear HTML del Encabezado del Informe (Puntajes)
+    const headerHTML = createReportHeader(report, testInfo);
+    elements.reportContentBody.innerHTML += headerHTML;
+
+    // 2. Crear HTML de las Pestañas (si es simulacro) o Contenedor Único
+    let tabsHTML = '';
+    let contentHTML = '';
+    
+    if (testInfo.type === 'simulacro') {
+        tabsHTML = `
+            <div class="mb-4 border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button class="tab-btn active" data-tab="sesion1">Sesión 1</button>
+                    <button class="tab-btn" data-tab="sesion2">Sesión 2</button>
+                    <button class="tab-btn" data-tab="feedback">Retroalimentación</button>
+                </nav>
+            </div>
+        `;
+        contentHTML = `
+            <div id="tab-content-sesion1" class="tab-content"></div>
+            <div id="tab-content-sesion2" class="tab-content hidden"></div>
+            <div id="tab-content-feedback" class="tab-content hidden"></div>
+        `;
+    } else {
+        // Minisimulacro (sin pestañas)
+        tabsHTML = `
+            <div class="mb-4 border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                    <button class="tab-btn active" data-tab="sesion1">Respuestas</button>
+                    <button class="tab-btn" data-tab="feedback">Retroalimentación</button>
+                </nav>
+            </div>
+        `;
+        contentHTML = `
+            <div id="tab-content-sesion1" class="tab-content"></div>
+            <div id="tab-content-feedback" class="tab-content hidden"></div>
+        `;
+    }
+
+    elements.reportContentBody.innerHTML += tabsHTML + contentHTML;
+    
+    // 3. Renderizar contenido de preguntas
+    const { keys, answers } = testData;
+    const questionsContainerS1 = document.getElementById('tab-content-sesion1');
+    const questionsContainerS2 = document.getElementById('tab-content-sesion2');
+
+    let questionGroups = {}; // { "MATEMÁTICAS": "...", "LECTURA CRÍTICA": "..." }
+
+    for (const questionHeader in keys) {
+        // Solo procesar si es un header de pregunta (contiene "[")
+        if (!questionHeader.includes('[')) continue; 
+
+        const studentAnswer = answers[questionHeader]?.trim().toUpperCase() || 'OMISION';
+        const correctAnswer = keys[questionHeader]?.trim().toUpperCase();
+        
+        // Extraer materia (ej. "Matemáticas S1")
+        const materiaMatch = questionHeader.match(/^(.*?)(?: S[12])? \[/);
+        let materia = materiaMatch ? materiaMatch[1].trim().toUpperCase() : 'INDEFINIDA';
+        
+        // Agrupar "Sociales y Ciudadanas"
+        if (materia.includes('SOCIALES') || materia.includes('CIUDADANAS')) {
+            materia = 'SOCIALES Y CIUDADANAS';
+        }
+        
+        if (!questionGroups[materia]) {
+            questionGroups[materia] = { html: '', isS2: questionHeader.includes('S2') };
+        }
+        
+        questionGroups[materia].html += createQuestionHTML(questionHeader, studentAnswer, correctAnswer);
+    }
+    
+    // Insertar grupos en los contenedores correctos
+    for(const materia in questionGroups) {
+        const group = questionGroups[materia];
+        const groupHTML = `
+            <div class="mb-6">
+                <h3 class="text-xl font-bold text-brand-header mb-4">${materia}</h3>
+                <div class="space-y-3">
+                    ${group.html}
+                </div>
+            </div>
+        `;
+        
+        if (testInfo.type === 'simulacro' && group.isS2 && questionsContainerS2) {
+            questionsContainerS2.innerHTML += groupHTML;
+        } else {
+            questionsContainerS1.innerHTML += groupHTML;
+        }
+    }
+
+    // 4. Renderizar contenido de Feedback (Videos)
+    const feedbackContainer = document.getElementById('tab-content-feedback');
+    if (feedbackContainer) {
+        feedbackContainer.innerHTML = createFeedbackHTML(report, testData.videos);
+    }
+
+    // 5. Añadir listeners a las pestañas
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const tabId = btn.dataset.tab;
+            // Ocultar todos los contenidos
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.style.display = 'none';
+            });
+            // Desactivar todos los botones
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                b.classList.remove('active');
+            });
+            // Mostrar contenido y activar botón
+            const contentEl = document.getElementById(`tab-content-${tabId}`);
+            if (contentEl) contentEl.style.display = 'block';
+            btn.classList.add('active');
+        });
+    });
+
+    // ======================================================
+    // INICIO: MEJORA 2 - Renderizar Gráfico de Radar
+    // ======================================================
+    const radarCtx = document.getElementById('radarChart')?.getContext('2d');
+    if (radarCtx && report) {
+        // Destruir gráfico anterior si existe
+        if (window.myRadarChart instanceof Chart) {
+            window.myRadarChart.destroy();
+        }
+        
+        // Crear el nuevo gráfico de radar
+        window.myRadarChart = new Chart(radarCtx, {
+            type: 'radar',
+            data: {
+                labels: ['Matemáticas', 'Lectura Crítica', 'Sociales', 'Ciencias', 'Inglés'],
+                datasets: [{
+                    label: `Puntajes (0-100) - ${testInfo.name}`,
+                    data: [
+                        report.mat_score,
+                        report.lec_score,
+                        report.soc_score,
+                        report.cie_score,
+                        report.ing_score
+                    ],
+                    backgroundColor: 'rgba(59, 130, 246, 0.2)', // brand-secondary con alpha
+                    borderColor: 'rgba(59, 130, 246, 1)',     // brand-secondary
+                    borderWidth: 2,
+                    pointBackgroundColor: 'rgba(59, 130, 246, 1)',
+                    pointBorderColor: '#fff',
+                    pointHoverBackgroundColor: '#fff',
+                    pointHoverBorderColor: 'rgba(59, 130, 246, 1)'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        angleLines: { color: 'rgba(0, 0, 0, 0.1)' },
+                        grid: { color: 'rgba(0, 0, 0, 0.1)' },
+                        pointLabels: {
+                            font: { size: 13, weight: 'bold' }
+                        },
+                        ticks: {
+                            beginAtZero: true,
+                            min: 0,
+                            max: 100,
+                            stepSize: 20,
+                            backdropColor: 'rgba(255, 255, 255, 0.75)',
+                            backdropPadding: 4
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    }
+                }
+            }
+        });
+    }
+    // ======================================================
+    // FIN: MEJORA 2 - Renderizar Gráfico de Radar
+    // ======================================================
+}
+
+// --- Funciones de Creación de HTML (Helpers) ---
+
+function createReportHeader(report, testInfo) {
+    // Aquí puedes añadir lógica de niveles de desempeño, etc.
+    return `
+        <div class="bg-brand-surface p-6 rounded-xl shadow-sm mb-6">
+            <h2 class="text-3xl font-bold text-brand-header mb-2">${testInfo.name}</h2>
+            <p class="text-lg text-gray-600 mb-6">Fecha: ${new Date(report.test_date).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-6 gap-6">
+                <!-- Puntaje Global -->
+                <div class="md:col-span-2 bg-gray-50 p-6 rounded-lg flex flex-col items-center justify-center">
+                    <span class="text-sm font-medium text-gray-500 mb-1">PUNTAJE GLOBAL</span>
+                    <span class="text-7xl font-extrabold text-brand-secondary">${report.global_score}</span>
+                    <span class="font-medium text-gray-600">sobre 500</span>
+                </div>
+                
+                <!-- Puntajes por Área -->
+                <div class="md:col-span-4 grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    ${createScoreCard('Matemáticas', report.mat_score, 'matematicas')}
+                    ${createScoreCard('Lectura Crítica', report.lec_score, 'lectura')}
+                    ${createScoreCard('Sociales y C.', report.soc_score, 'sociales')}
+                    ${createScoreCard('Ciencias Nat.', report.cie_score, 'ciencias')}
+                    ${createScoreCard('Inglés', report.ing_score, 'ingles')}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function createScoreCard(materia, puntaje, cssClass) {
+    // Lógica de Nivel (ejemplo)
+    let nivel = 'Bajo';
+    let nivelColor = 'text-brand-red';
+    if (puntaje >= 41) { nivel = 'Básico'; nivelColor = 'text-yellow-600'; }
+    if (puntaje >= 61) { nivel = 'Satisfactorio'; nivelColor = 'text-brand-green'; }
+    if (puntaje >= 81) { nivel = 'Avanzado'; nivelColor = 'text-brand-secondary'; }
+
+    return `
+        <div class="bg-gray-50 p-4 rounded-lg text-center border-l-4 border-${cssClass}">
+            <h5 class="text-sm font-bold text-${cssClass} truncate">${materia}</h5>
+            <p class="text-4xl font-bold text-brand-header my-1">${puntaje}</p>
+            <p class="text-sm font-medium ${nivelColor}">${nivel}</p>
+        </div>
+    `;
+}
+
+function createQuestionHTML(header, studentAnswer, correctAnswer) {
+    const isCorrect = studentAnswer === correctAnswer;
+    const isOmitted = studentAnswer === 'OMISION';
+    
+    let bgColor = isCorrect ? 'bg-green-50' : (isOmitted ? 'bg-yellow-50' : 'bg-red-50');
+    let borderColor = isCorrect ? 'border-green-200' : (isOmitted ? 'border-yellow-200' : 'border-red-200');
+    let icon = isCorrect 
+        ? `<span class="text-brand-green font-bold">&#10003;</span>` // Check
+        : (isOmitted 
+            ? `<span class="text-yellow-600 font-bold">!</span>` // Exclamación
+            : `<span class="text-brand-red font-bold">&#10005;</span>`); // X
+
+    return `
+        <div class="p-3 rounded-lg border ${borderColor} ${bgColor} flex items-center justify-between space-x-4">
+            <div class="flex items-center space-x-3">
+                ${icon}
+                <span class="text-sm font-medium text-brand-header">${header.split('[')[1].replace(']', '')}</span>
+            </div>
+            <div class="flex items-center space-x-4">
+                <span class="text-sm ${isCorrect ? 'text-gray-500' : (isOmitted ? 'text-yellow-600' : 'text-brand-red')}">
+                    Tu Rpta: <span class="font-bold">${studentAnswer}</span>
+                </span>
+                ${!isCorrect ? `
+                <span class="text-sm text-brand-green">
+                    Correcta: <span class="font-bold">${correctAnswer}</span>
+                </span>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+function createFeedbackHTML(report, videoDB) {
+    let html = '<div class="space-y-8">';
+    const materias = [
+        { key: 'MATEMATICAS', score: report.mat_score, name: 'Matemáticas' },
+        { key: 'LECTURA CRITICA', score: report.lec_score, name: 'Lectura Crítica' },
+        { key: 'SOCIALES Y CIUDADANAS', score: report.soc_score, name: 'Sociales y Ciudadanas' },
+        { key: 'CIENCIAS NATURALES', score: report.cie_score, name: 'Ciencias Naturales' },
+        { key: 'INGLES', score: report.ing_score, name: 'Inglés' }
+    ];
+
+    materias.forEach(materia => {
+        // Determinar nivel basado en puntaje
+        let nivel = 'BAJO'; // Por defecto
+        if (materia.score >= 41) nivel = 'BASICO';
+        if (materia.score >= 61) nivel = 'SATISFACTORIO';
+        if (materia.score >= 81) nivel = 'AVANZADO';
+        
+        // Buscar videos para esa materia y ese nivel
+        const videos = videoDB[materia.key]?.[nivel] || [];
+        
+        html += `
+            <div>
+                <h3 class="text-2xl font-bold text-brand-header mb-4 border-b pb-2">
+                    Retroalimentación de ${materia.name} (Nivel ${nivel})
+                </h3>
+        `;
+        
+        if (videos.length > 0) {
+            html += '<div class="video-grid">';
+            videos.forEach(video => {
+                html += `
+                    <a href="${video.url}" target="_blank" class="video-card block">
+                        <img src="${video.thumbnail}" alt="${video.title}" class="video-thumbnail" onerror="this.src='https://placehold.co/480x270/e5e7eb/374151?text=Video';">
+                        <div class="p-4">
+                            <p class="font-semibold text-brand-header hover:text-brand-secondary">${video.title}</p>
+                            <p class="text-sm text-gray-500">${video.id}</p>
+                        </div>
+                    </a>
+                `;
+            });
+            html += '</div>';
+        } else {
+            html += `<p class="text-gray-600">No hay videos de retroalimentación asignados para tu nivel de desempeño en esta materia.</p>`;
+        }
+        
+        html += `</div>`;
+    });
+
+    html += '</div>';
+    return html;
+}
+
+// --- Funciones de Modal ---
+
+function openModal(modalBackdrop) {
+    modalBackdrop.style.display = 'flex';
+    setTimeout(() => {
+        modalBackdrop.style.opacity = 1;
+        modalBackdrop.querySelector('.modal-container').style.transform = 'scale(1)';
+    }, 10);
+}
+
+function closeModal(modalBackdrop) {
+    modalBackdrop.style.opacity = 0;
+    modalBackdrop.querySelector('.modal-container').style.transform = 'scale(0.95)';
+    setTimeout(() => {
+        modalBackdrop.style.display = 'none';
+    }, 300);
+}
+
+// (NUEVO) Modal de Alerta simple
+function showModalAlert(message) {
+    // (Esta es una implementación simple, idealmente crearías un modal de alerta dedicado)
+    alert(message);
+}
+
+// (NUEVO) Funciones de Modal de Token (Mejora 3)
+function showTokenModal(title, message) {
+    // Limpiar estado anterior
+    elements.tokenModalStatus.textContent = '';
+    elements.tokenModalStatus.style.display = 'none';
+    elements.githubTokenInput.value = ''; // No guardar el token
+    
+    // (Opcional) Personalizar textos
+    // document.getElementById('token-modal-title').textContent = title;
+    // document.getElementById('token-modal-message').textContent = message;
+
+    openModal(elements.tokenModal);
+}
+
+
+// ======================================================
+// INICIO: MEJORA 1 - Funciones de Análisis Estadístico
+// ======================================================
+
+/**
+ * Realiza el análisis estadístico de una prueba.
+ * Carga respuestas, claves, y procesa los datos.
+ * @param {string} testId - El ID de la prueba (ej. "sg11_07" o "mini_1")
+ * @returns {Promise<Object>} - Un objeto con los resultados del análisis
+ */
+async function analyzeTestItems(testId) {
+    const testInfo = TEST_INDEX[testId];
+    if (!testInfo) {
+        throw new Error(`No se encontró información para la prueba ${testId}`);
+    }
+
+    const stats = {};
+
+    // --- 1. Cargar Claves y Respuestas ---
+    const loadAndParse = async (url) => {
+        if (!url) return null;
+        const fullUrl = `${BASE_DATA_URL}${url}?t=${TIMESTAMP}`;
+        return await fetchAndParseCSV(fullUrl);
+    };
+
+    let keysData = [];
+    let answersData = [];
+
+    if (testInfo.type === 'simulacro') {
+        const [keysS1, keysS2, answersS1, answersS2] = await Promise.all([
+            loadAndParse(testInfo.keys_s1),
+            loadAndParse(testInfo.keys_s2),
+            loadAndParse(testInfo.answers_s1),
+            loadAndParse(testInfo.answers_s2)
+        ]);
+        keysData = [...(keysS1 || []), ...(keysS2 || [])];
+        answersData = [...(answersS1 || []), ...(answersS2 || [])];
+    } else {
+        const [keys, answers] = await Promise.all([
+            loadAndParse(testInfo.keys),
+            loadAndParse(testInfo.answers)
+        ]);
+        keysData = keys || [];
+        answersData = answers || [];
+    }
+
+    if (keysData.length === 0) throw new Error("No se pudieron cargar los archivos de claves.");
+    if (answersData.length === 0) throw new Error("No se pudieron cargar los archivos de respuestas.");
+
+    // Mapear claves (asumiendo que es la primera fila)
+    // Combinar todas las claves en un solo objeto (para S1 y S2)
+    const keysMap = keysData.reduce((acc, obj) => ({...acc, ...obj}), {});
+    for (const header in keysMap) {
+        if (header.includes('[')) { // Solo procesar headers de preguntas
+            stats[header] = {
+                pregunta: header,
+                correcta: keysMap[header]?.trim().toUpperCase(),
+                A: 0, B: 0, C: 0, D: 0, Omision: 0,
+                total: 0,
+                correctas: 0
+            };
+        }
+    }
+
+    // --- 2. Procesar Respuestas de TODOS los estudiantes ---
+    for (const studentRow of answersData) {
+        for (const questionHeader in stats) {
+            if (studentRow.hasOwnProperty(questionHeader)) {
+                const studentAnswer = studentRow[questionHeader]?.trim().toUpperCase() || 'OMISION';
+                const correctAnswer = stats[questionHeader].correcta;
+                
+                const statsEntry = stats[questionHeader];
+                statsEntry.total++;
+
+                // Conteo de distractores
+                if (studentAnswer === 'A') statsEntry.A++;
+                else if (studentAnswer === 'B') statsEntry.B++;
+                else if (studentAnswer === 'C') statsEntry.C++;
+                else if (studentAnswer === 'D') statsEntry.D++;
+                else statsEntry.Omision++;
+                
+                // Conteo de aciertos
+                if (studentAnswer === correctAnswer) {
+                    statsEntry.correctas++;
+                }
+            }
+        }
+    }
+    
+    return stats;
+}
+
+/**
+ * Renderiza los resultados del análisis en la tabla HTML.
+ * @param {Object} stats - El objeto de resultados de analyzeTestItems
+ */
+function renderStatsTable(stats) {
+    elements.statsResultsTableBody.innerHTML = ''; // Limpiar tabla
+    
+    // Convertir a array para poder ordenar
+    const statsArray = Object.values(stats);
+    // Ordenar por % de acierto (más difícil primero)
+    statsArray.sort((a, b) => {
+        const pctA = a.total > 0 ? (a.correctas / a.total) : 0;
+        const pctB = b.total > 0 ? (b.correctas / b.total) : 0;
+        return pctA - pctB; // Ascendente
+    });
+
+    for (const item of statsArray) {
+        if (item.total === 0) continue; // No mostrar preguntas sin respuestas
+
+        // Calcular porcentajes
+        const pctAcierto = ((item.correctas / item.total) * 100).toFixed(0);
+        const pctOmision = ((item.Omision / item.total) * 100).toFixed(0);
+        const pctA = ((item.A / item.total) * 100).toFixed(0);
+        const pctB = ((item.B / item.total) * 100).toFixed(0);
+        const pctC = ((item.C / item.total) * 100).toFixed(0);
+        const pctD = ((item.D / item.total) * 100).toFixed(0);
+
+        // Determinar dificultad (para el color)
+        let dificultadClase = 'text-yellow-600'; // Medio
+        let dificultadTexto = 'Medio';
+        if (pctAcierto >= 75) {
+            dificultadClase = 'text-green-700'; // Fácil
+            dificultadTexto = 'Fácil';
+        } else if (pctAcierto <= 35) {
+            dificultadClase = 'text-red-700'; // Difícil
+            dificultadTexto = 'Difícil';
+        }
+        
+        // Resaltar la respuesta correcta
+        const distA = item.correcta === 'A' ? 'font-bold text-green-700' : '';
+        const distB = item.correcta === 'B' ? 'font-bold text-green-700' : '';
+        const distC = item.correcta === 'C' ? 'font-bold text-green-700' : '';
+        const distD = item.correcta === 'D' ? 'font-bold text-green-700' : '';
+
+        const rowHTML = `
+            <tr>
+                <td class="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${item.pregunta}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-center font-bold text-brand-green">${item.correcta}</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-center">
+                    <span class="font-semibold ${dificultadClase}">${pctAcierto}%</span> (${dificultadTexto})
+                </td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-center">${pctOmision}%</td>
+                <td class="px-4 py-4 whitespace-nowrap text-sm text-gray-500 leading-tight">
+                    <div class="${distA}">A: ${pctA}%</div>
+                    <div class="${distB}">B: ${pctB}%</div>
+                    <div class="${distC}">C: ${pctC}%</div>
+                    <div class="${distD}">D: ${pctD}%</div>
+                </td>
+            </tr>
+        `;
+        elements.statsResultsTableBody.innerHTML += rowHTML;
+    }
+}
+// ======================================================
+// FIN: MEJORA 1 - Funciones de Análisis Estadístico
+// ======================================================
+
+
+// ======================================================
+// INICIO: MEJORA 3 - Funciones de GitHub API (Actualizadas)
+// (Estas reemplazan las versiones antiguas. Ahora aceptan 'token')
+// ======================================================
+
+/**
+ * Obtiene el contenido y 'sha' de un archivo de GitHub.
+ * @param {string} apiUrl - URL de la API de GitHub para el archivo
+ * @param {string} token - Token de acceso personal
+ * @returns {Promise<Object>} - Promesa que resuelve a { content, sha }
+ */
+async function getGitHubFile(apiUrl, token) {
+    const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+            'Authorization': `token ${token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Cache-Control': 'no-cache', // Forzar obtener la última versión
+            'Pragma': 'no-cache'
+        }
+    });
+    if (!response.ok) {
+        throw new Error(`Error al leer archivo de GitHub (${response.status}): ${response.statusText}`);
+    }
+    return await response.json(); // Devuelve { content: '...', sha: '...' }
+}
+
+/**
+ * Actualiza (hace commit) de un archivo en GitHub.
+ * @param {string} apiUrl - URL de la API de GitHub para el archivo
+ *_stack_trace_placeholder_
+ * @param {string} token - Token de acceso personal
+ * @param {string} commitMessage - Mensaje del commit
+ * @param {string} contentBase64 - Nuevo contenido en formato Base64
+ * @param {string} sha - El 'sha' del archivo que se está actualizando
+ * @returns {Promise<Object>} - Promesa que resuelve con la respuesta de la API
+ */
+async function updateGitHubFile(apiUrl, token, commitMessage, contentBase64, sha) {
+    const response = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `token ${token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            message: commitMessage,
+            content: contentBase64,
+            sha: sha,
+            branch: REPO_BRANCH
+        })
+    });
+    if (!response.ok) {
+         const errorData = await response.json();
+        throw new Error(`Error al escribir archivo en GitHub (${response.status}): ${errorData.message}`);
+    }
+    return await response.json();
+}
+// ======================================================
+// FIN: MEJORA 3 - Funciones de GitHub API
+// ======================================================
