@@ -1,24 +1,18 @@
-/* --- ESTILOS BASE Y FUENTES (v6) --- */
+/* --- VARIABLES DE COLOR CSS --- */
 :root {
-    /* Paleta de Colores Principal */
     --brand-primary: #F97316;
     --brand-secondary: #3B82F6;
     --brand-blue-dark: #1e40af;
-    --brand-bg: #f8f9fa;
-    --brand-sidebar: #111827;
-    --brand-sidebar-hover: #1f2937;
-    --brand-sidebar-text: #d1d5db;
-    --brand-sidebar-active: #3B82F6;
-    --brand-text: #374151;
-    --brand-header: #1f2937;
-    --brand-surface: #ffffff;
-    --brand-border: #e5e7eb;
+    --brand-bg: #f8fafc; /* slate-50 */
+    --brand-text: #334155; /* slate-700 */
+    --brand-header: #0f172a; /* slate-900 */
+    --brand-surface: #ffffff; /* white */
+    --brand-border: #e2e8f0; /* slate-200 */
     --brand-red: #DC2626;
     --brand-green: #16A34A;
     --brand-yellow: #ca8a04;
-    --brand-purple: #9333ea;
-    
-    /* Colores de Materias */
+
+    /* Colores de materias */
     --color-lectura: #0284c7;
     --color-matematicas: #dc2626;
     --color-sociales: #ca8a04;
@@ -26,306 +20,216 @@
     --color-ingles: #9333ea;
 }
 
-body {
-    font-family: 'Inter', sans-serif;
-    background-color: var(--brand-bg);
-    color: var(--brand-text);
-    overflow-x: hidden;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-}
-
-/* Ocultar scrollbars */
-::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-}
-::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 10px;
-}
-::-webkit-scrollbar-thumb {
-    background: #ccc;
-    border-radius: 10px;
-}
-::-webkit-scrollbar-thumb:hover {
-    background: #aaa;
-}
-
-
-/* --- LAYOUT DEL DASHBOARD (v6) --- */
-
-.sidebar-container {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 260px; /* Ancho del sidebar */
-    height: 100vh;
-    background-color: var(--brand-sidebar);
-    color: var(--brand-sidebar-text);
-    z-index: 50;
-    transform: translateX(-100%); /* Oculto por defecto en móvil */
-    transition: transform 0.3s ease-in-out;
-}
-
-.main-content-container {
-    margin-left: 0; /* Por defecto en móvil */
-    padding-top: 60px; /* Espacio para el botón de menú móvil */
-    width: 100%;
-    transition: margin-left 0.3s ease-in-out;
-}
-
-/* Estilos de layout para Desktop */
-@media (min-width: 1024px) {
-    .sidebar-container {
-        transform: translateX(0); /* Visible en desktop */
-    }
-    .main-content-container {
-        margin-left: 260px; /* Mover el contenido */
-        padding-top: 0; /* Resetear padding móvil */
-        width: calc(100% - 260px);
-    }
-}
-
-/* Para mostrar el sidebar en móvil */
-.sidebar-container.is-open {
-    transform: translateX(0);
-}
-
-/* Overlay para móvil cuando el sidebar está abierto */
-.sidebar-overlay {
-    position: fixed;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.5);
-    z-index: 49;
-}
-
-
-/* --- COMPONENTES DEL SIDEBAR (v6) --- */
-
-.sidebar-link {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem; /* 12px */
-    padding: 0.75rem 1rem; /* 12px 16px */
-    border-radius: 0.375rem; /* rounded-md */
-    font-weight: 500;
-    transition: all 0.2s ease;
-    cursor: pointer;
-}
-.sidebar-link i {
-    width: 1.25rem; /* 20px */
-    height: 1.25rem; /* 20px */
-}
-.sidebar-link:hover {
-    background-color: var(--brand-sidebar-hover);
-    color: white;
-}
-.sidebar-link.active {
-    background-color: var(--brand-sidebar-active);
-    color: white;
-}
-
-
-/* --- PANELES DEL DASHBOARD (v6) --- */
-
-.dashboard-panel {
-    display: none; /* Ocultos por defecto */
-}
-.dashboard-panel.active {
-    display: block; /* Se muestra el panel activo */
-}
-
-
-/* --- ESTILOS DE FORMULARIOS (Reutilizables) --- */
-
+/* --- ESTILOS DE COMPONENTES BASE --- */
 .form-label {
-    @apply block text-sm font-medium text-gray-700;
+    @apply block text-sm font-medium text-brand-text/90 mb-1;
 }
 
 .form-input {
-    @apply block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm
+    @apply block w-full px-3 py-2 bg-brand-surface border border-brand-border rounded-md shadow-sm
+           placeholder-brand-text/40
            focus:outline-none focus:ring-2 focus:ring-brand-secondary/50 focus:border-brand-secondary
            transition duration-150 ease-in-out;
 }
 
-select.form-input {
-    /* (Tailwind no aplica bien 'appearance-none' en @apply) */
-    appearance: none; 
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-    background-position: right 0.5rem center;
-    background-repeat: no-repeat;
-    background-size: 1.5em 1.5em;
-    padding-right: 2.5rem;
+/* Botones Principales */
+.button-primary {
+    @apply inline-flex items-center justify-center px-4 py-2 bg-brand-secondary border border-transparent rounded-md
+           font-semibold text-sm text-white
+           hover:bg-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-secondary
+           transition duration-200 ease-in-out shadow-sm;
 }
 
-
-/* --- ESTILOS DE BOTONES (Reutilizables) --- */
-
-.btn {
-    @apply inline-flex items-center justify-center px-4 py-2 border border-transparent 
-           text-sm font-medium rounded-lg shadow-sm focus:outline-none focus:ring-2 
-           focus:ring-offset-2 transition-all duration-200 ease-in-out;
+.button-primary-green {
+    @apply inline-flex items-center justify-center px-4 py-2 bg-brand-green border border-transparent rounded-md
+           font-semibold text-sm text-white
+           hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-green
+           transition duration-200 ease-in-out shadow-sm;
 }
 
-.btn-primary {
-    @apply btn text-white bg-brand-secondary hover:bg-brand-blue-dark focus:ring-brand-blue-dark;
-}
-.btn-secondary-outline {
-    @apply btn text-brand-text bg-brand-surface border-brand-border hover:bg-gray-50;
-}
-.btn-danger {
-    @apply btn text-white bg-brand-red hover:bg-red-700 focus:ring-brand-red;
-}
-.btn-icon {
-    @apply p-2 rounded-full text-gray-500 hover:bg-gray-100 hover:text-brand-text transition-colors;
+.button-secondary {
+    @apply inline-flex items-center justify-center px-4 py-2 bg-brand-surface border border-brand-border rounded-md
+           font-semibold text-sm text-brand-text
+           hover:bg-brand-bg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-secondary/50
+           transition duration-200 ease-in-out shadow-sm;
 }
 
-
-/* --- COMPONENTES DE TARJETAS (v5/v6) --- */
-
-/* (v5) Tarjetas de Métricas (KPIs) Admin */
-.kpi-card {
-    @apply p-5 rounded-2xl shadow-lg flex items-center gap-4;
-}
-.kpi-card .kpi-icon {
-    @apply p-3 rounded-full text-white shadow-md;
-}
-.kpi-card .kpi-icon i {
-    @apply w-6 h-6;
+.button-danger {
+    @apply inline-flex items-center justify-center px-4 py-2 bg-red-50 border border-red-200 rounded-md
+           font-semibold text-sm text-brand-red
+           hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-400
+           transition duration-200 ease-in-out shadow-sm;
 }
 
-/* (Estudiante) Tarjeta de Informe en Dashboard */
+/* --- ESTILOS DE LAYOUT (SIDEBAR Y CONTENIDO) --- */
+.nav-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-brand-text
+           hover:bg-brand-bg hover:text-brand-header
+           transition-colors duration-150 ease-in-out;
+}
+
+.nav-link.active {
+    @apply bg-brand-secondary/10 text-brand-secondary font-semibold;
+}
+
+.nav-link i {
+    @apply w-5 h-5;
+}
+
+/* Para ocultar/mostrar secciones de admin/estudiante */
+.nav-section.admin-nav,
+.nav-section.student-nav {
+    display: none; /* Ocultos por defecto */
+}
+
+/* Clases de utilidad */
+.app-section {
+    animation: fadeIn 0.5s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- ESTILOS DE COMPONENTES DE DASHBOARD --- */
+
+/* Tarjetas de Informes (Estudiante) */
 .report-card {
-    @apply bg-brand-surface p-6 rounded-2xl shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1;
+    @apply bg-brand-surface p-5 rounded-lg shadow-sm border border-brand-border
+           transition-all duration-200 ease-in-out
+           hover:shadow-md hover:border-brand-secondary/50;
 }
 
-/* (v5) (Admin) Tarjeta de Estadísticas de Ítem */
-.stats-card {
-    @apply bg-brand-surface p-5 rounded-lg shadow-md border border-brand-border;
-}
-.distractor-bar {
-    @apply relative w-full h-8 bg-gray-200 rounded-md overflow-hidden text-xs font-bold;
-}
-.distractor-bar .label {
-    @apply absolute left-2 top-1/2 -translate-y-1/2 z-10 text-gray-800;
-}
-.distractor-bar .bar {
-    @apply absolute top-0 left-0 h-full bg-gray-400 opacity-70;
+.report-card-placeholder {
+    @apply bg-brand-surface p-5 rounded-lg shadow-sm border border-brand-border h-40 animate-pulse;
 }
 
-/* Resaltar barra correcta */
-.distractor-bar.correct .label {
-    @apply text-green-900;
+/* Tarjetas de Métricas (Admin KPI) */
+.kpi-card {
+    @apply bg-brand-surface p-5 rounded-lg shadow-sm border border-brand-border flex flex-col;
 }
-.distractor-bar.correct .bar {
-    @apply bg-green-500 opacity-100;
+.kpi-icon {
+    @apply w-10 h-10 rounded-full flex items-center justify-center mb-3;
+}
+.kpi-icon i {
+    @apply w-5 h-5;
+}
+.kpi-label {
+    @apply text-sm text-brand-text/80 mb-1;
+}
+.kpi-value {
+    @apply text-3xl font-bold text-brand-header;
 }
 
-/* (Estudiante) Filtros de Gráfico */
-.chart-filter-btn {
-    @apply px-4 py-1 text-sm font-medium rounded-full border-2 border-transparent 
-           text-gray-600 bg-gray-100 hover:bg-gray-200 transition-all;
-}
-.chart-filter-btn.active {
-    @apply bg-brand-secondary/10 text-brand-secondary border-brand-secondary;
-}
-
-
-/* --- COMPONENTES DE TABLAS --- */
-
-/* (Admin) Tabla de Estudiantes */
+/* Tabla de Gestión (Admin) */
 .table-header {
-    @apply px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100;
-}
-.table-header .sort-icon {
-    @apply inline-block ml-1 opacity-40;
-}
-.table-header.sorted .sort-icon {
-    @apply opacity-100;
+    @apply px-4 py-3 text-left text-xs font-semibold text-brand-text/70 uppercase tracking-wider cursor-pointer
+           hover:bg-slate-100;
 }
 .table-cell {
-    @apply px-4 py-4 whitespace-nowrap text-sm;
+    @apply px-4 py-3 whitespace-nowrap text-sm;
+}
+.table-row {
+    @apply border-b border-brand-border transition-colors duration-150;
+}
+.table-row:last-child {
+    @apply border-b-0;
+}
+.table-row:hover {
+    @apply bg-brand-bg;
 }
 
-/* (Admin) Paginación */
-.pagination-btn {
-    @apply p-2 rounded-md text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent;
-}
-.pagination-btn.active {
-    @apply bg-brand-secondary text-white font-bold hover:bg-brand-secondary;
-}
-
-/* (Estudiante) Tabla de Feedback de Preguntas */
-.feedback-table th {
-    @apply p-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50;
-}
-.feedback-table td {
-    @apply p-3 whitespace-nowrap text-sm border-b border-brand-border;
-}
-.feedback-table .icon-correct {
-    @apply h-5 w-5 text-brand-green;
-}
-.feedback-table .icon-incorrect {
-    @apply h-5 w-5 text-brand-red;
-}
-.feedback-table .highlight-correct {
-    @apply font-bold text-brand-green;
-}
-.feedback-table .highlight-incorrect {
-    @apply font-bold text-brand-red;
-}
-.feedback-table .text-muted {
-    @apply text-gray-500;
-}
-
-
-/* --- MODALES (v5/v6) --- */
-
+/* --- MODALS --- */
 .modal-backdrop {
-    @apply fixed inset-0 z-50 flex items-center justify-center p-4 
-           bg-black/60 backdrop-blur-sm opacity-0 
-           transition-opacity duration-300 ease-in-out;
-    display: none; /* Oculto por JS */
+    @apply fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4
+           opacity-0 invisible transition-opacity duration-300 ease-in-out;
 }
-.modal-backdrop.is-open {
-    @apply opacity-100;
+.modal-backdrop.shown {
+    @apply opacity-100 visible;
 }
 
 .modal-container {
-    @apply bg-brand-surface w-full max-w-lg rounded-2xl shadow-2xl 
+    @apply bg-brand-surface w-full rounded-lg shadow-2xl border border-brand-border
            transform scale-95 opacity-0 transition-all duration-300 ease-in-out;
 }
-.modal-backdrop.is-open .modal-container {
+.modal-backdrop.shown .modal-container {
     @apply scale-100 opacity-100;
 }
 
 .modal-header-container {
-    @apply flex justify-between items-center p-5 border-b border-brand-border;
+    @apply flex items-center justify-between p-4 border-b border-brand-border;
 }
 .modal-header {
-    @apply text-xl font-bold text-brand-header;
+    @apply text-lg font-semibold text-brand-header;
 }
 .modal-close-btn {
-    @apply p-1 rounded-full text-gray-500 hover:bg-gray-100 hover:text-brand-header transition-colors;
-}
-.modal-close-btn i {
-    @apply w-5 h-5;
+    @apply text-brand-text/60 hover:text-brand-red hover:bg-red-100 rounded-full p-1
+           transition-colors duration-150;
 }
 
-.modal-body {
-    @apply p-6 max-h-[70vh] overflow-y-auto;
+/* Filtros de Gráfico (Modal y Estudiante) */
+.chart-filter-btn {
+    @apply px-3 py-1.5 border border-brand-border rounded-full
+           text-sm font-medium text-brand-text
+           hover:bg-brand-bg
+           transition-all duration-200;
 }
-.modal-footer {
-    @apply flex justify-end gap-3 p-5 bg-gray-50 rounded-b-2xl border-t border-brand-border;
+.chart-filter-btn.active {
+    @apply bg-brand-secondary text-white border-brand-secondary;
 }
 
-/* Ancho específico para modal de admin (v5) */
-.modal-container.max-w-5xl {
-    max-width: 64rem; /* 1024px */
+/* --- ESTILOS DEL INFORME INDIVIDUAL --- */
+.score-card {
+    @apply bg-brand-surface p-5 rounded-lg shadow-sm border border-brand-border text-center;
+}
+.score-card .subject-icon {
+    @apply w-10 h-10 mx-auto mb-3;
+}
+.score-card .score-value {
+    @apply text-4xl font-extrabold text-brand-header;
+}
+.score-card .score-label {
+    @apply text-sm font-medium text-brand-text/80;
 }
 
-/* Evitar scroll del body cuando el modal está abierto */
-body.modal-open {
-    overflow: hidden;
+.feedback-table th {
+    @apply px-3 py-2 text-left text-xs font-medium text-brand-text/70 uppercase tracking-wider bg-slate-50;
+}
+.feedback-table td {
+    @apply px-3 py-2 text-sm;
+}
+.feedback-table .icon-correct {
+    @apply w-5 h-5 text-brand-green;
+}
+.feedback-table .icon-incorrect {
+    @apply w-5 h-5 text-brand-red;
+}
+
+/* --- ESTILOS DE ANÁLISIS DE ÍTEMS (ADMIN) --- */
+.stats-card {
+    @apply bg-brand-surface p-5 rounded-lg shadow-sm border border-brand-border;
+}
+.stats-card-header {
+    @apply flex justify-between items-center pb-3 border-b border-brand-border;
+}
+.stats-card-title {
+    @apply text-base font-semibold text-brand-header;
+}
+.stats-card-pills {
+    @apply flex items-center gap-2;
+}
+.stats-pill {
+    @apply px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+.stats-pill-green { @apply bg-green-100 text-green-800; }
+.stats-pill-yellow { @apply bg-yellow-100 text-yellow-800; }
+.stats-pill-red { @apply bg-red-100 text-red-800; }
+.stats-pill-gray { @apply bg-slate-100 text-slate-700; }
+
+.distractor-bar-container {
+    @apply w-full bg-slate-100 rounded-full h-2.5;
+}
+.distractor-bar {
+    @apply h-2.5 rounded-full transition-all duration-500;
 }
