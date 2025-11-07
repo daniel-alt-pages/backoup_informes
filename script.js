@@ -1,649 +1,1089 @@
-// --- Variables Globales y Configuración (v6) ---
+/* ========================================================================
+   PLATAFORMA DE INFORMES v6.6
+   ------------------------------------------------------------------------
+   Autor: Daniel Altamar (con Asistente de Programación)
+   Fecha: 2025-11-07
+   Descripción: Lógica principal para la plataforma de informes.
+   Maneja el login, la carga de datos (CSV/JSON) y la renderización
+   de dashboards para estudiantes y administradores.
+   ======================================================================== */
 
-// (v5.4) Credenciales de admin simplificadas
+// --- 1. CONFIGURACIÓN GLOBAL Y VARIABLES DE ESTADO ---
+
 const SUPER_USER_CREDENTIALS = { username: "admin", password: "admin2024" };
 const BASE_DATA_URL = `https://raw.githubusercontent.com/daniel-alt-pages/backoup_informes/main/`;
 const TIMESTAMP = Date.now(); // Cache-busting
 
-// Rutas a los archivos de la arquitectura
+// Rutas a los archivos de datos principales
 const URLS = {
     studentDatabase: `${BASE_DATA_URL}database/student_database.csv?t=${TIMESTAMP}`,
     scoresDatabase: `${BASE_DATA_URL}database/scores_database.csv?t=${TIMESTAMP}`,
     testIndex: `${BASE_DATA_URL}database/test_index.json?t=${TIMESTAMP}`
 };
 
-// Almacenes de datos
-let STUDENT_DB = {};           // Objeto, { doc_number: { ...datos } }
-let SCORES_DB = [];            // Array, [ { ...puntajes } ]
-let TEST_INDEX = {};           // Objeto, { test_id: { ...info } }
-let ALL_STUDENTS_ARRAY = [];   // (Admin) Array, [ { ...datos } ]
-let CURRENT_STUDENT_REPORTS = []; // (Estudiante) Array de informes del estudiante logueado
-let CURRENT_STUDENT_DATA = null; // (Estudiante) Objeto con datos del estudiante logueado
-let CACHED_TEST_DATA = {};     // Almacén para claves y respuestas de pruebas
+// Almacenes de datos (Cargados al inicio)
+let STUDENT_DB = {};           // Objeto para login rápido: { "docNumber": { ...datosEstudiante } }
+let SCORES_DB = [];            // Array de TODOS los puntajes
+let TEST_INDEX = {};           // Objeto con la info de test_index.json
+let ALL_STUDENTS_ARRAY = [];   // Array para la tabla de admin
 
-// Estado de la UI
+// Variables de estado de sesión
+let CURRENT_USER_ROLE = null; // 'student' o 'admin'
+let CURRENT_STUDENT_DATA = null; // Datos del estudiante que inició sesión
+let CURRENT_STUDENT_REPORTS = []; // Reportes (de SCORES_DB) del estudiante actual
+
+// Variables de estado de la UI (Admin)
 let currentAdminPage = 1;
-const ADMIN_ROWS_PER_PAGE = 10;
+let adminRowsPerPage = 10;
+let currentAdminFilter = "";
 let currentAdminSort = { column: 'Nombre Completo del Estudiante', direction: 'asc' };
-let isAdminViewingReport = false; // Flag para el botón "Volver"
-let currentActivePanel = ''; // (v6) Panel activo
-let globalStudentName = ''; // (v6) Nombre del usuario logueado
-let globalStudentRole = ''; // (v6) Rol del usuario logueado
+let filteredAdminStudents = [];
 
-// Configuración del CRUD (API de GitHub)
-const GITHUB_API_CONFIG = {
-    owner: "daniel-alt-pages",
-    repo: "backoup_informes",
-    branch: "main",
-    studentDbPath: "database/student_database.csv"
-};
-// (v5) Caché de cambios del CRUD
-let crudCache = {
-    studentDb: null
+// Almacén para datos de pruebas cacheados (para no recargar CSVs)
+let CACHED_TEST_DATA = {};
+// Almacén para el CRUD de GitHub
+let PENDING_CHANGES = {
+    student_database: []
 };
 
+// Referencias al DOM (se poblarán en initializeDOMQueries)
+const elements = {};
 
-// --- 1. INICIALIZACIÓN DE LA APLICACIÓN ---
 
-// (CORREGIDO v6.1) Cambiar de 'DOMContentLoaded' a 'load'
-// 'load' espera a que TODAS las librerías (PapaParse, Chart.js, Lucide) estén cargadas.
-// Esto previene el error "Papa is not defined".
-window.addEventListener('load', () => {
-    // Asignar listeners de eventos
-    setupEventListeners();
+// --- 2. INICIALIZACIÓN DE LA APLICACIÓN ---
 
-    // Iniciar la carga de datos
-    loadAllData();
+/**
+ * Punto de entrada principal. Se dispara cuando el HTML y 
+ * todas las librerías (Papa, Chart, lucide) están cargadas.
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    // 1. Obtener referencias a todos los elementos del DOM
+    initializeDOMQueries();
     
-    // Inicializar Lucide Icons (por si se añaden dinámicamente)
-    // (Asegúrate de llamarlo también después de insertar HTML con iconos)
-    try {
-        lucide.createIcons();
-    } catch (e) {
-        console.warn("Lucide icons no se pudieron inicializar (puede ser normal en la carga inicial).");
-    }
+    // 2. Configurar todos los event listeners (clics, inputs, etc.)
+    setupEventListeners();
+    
+    // 3. Iniciar la carga de datos
+    loadAllData();
 });
 
 /**
- * Carga todos los datos esenciales de la plataforma (CSV y JSON).
- * (v5.4) Lógica de 'trim' (limpieza) movida a 'processStudentData'
+ * Obtiene y almacena referencias a todos los elementos clave del DOM.
  */
-async function loadAllData() {
-    const loadingMessage = document.getElementById('loading-message');
-    const loadingError = document.getElementById('loading-error');
-    const loadingScreen = document.getElementById('loading-section');
-    const loginScreen = document.getElementById('login-section');
-
-    if (!loadingMessage || !loadingError || !loadingScreen || !loginScreen) {
-        console.error("Error fatal: No se encontraron los elementos de la pantalla de carga en el HTML.");
-        alert("Error fatal. No se pudo cargar la aplicación. Faltan elementos de carga.");
-        return;
-    }
-
-    try {
-        // 1. Cargar el índice de pruebas (JSON)
-        loadingMessage.textContent = 'Cargando índice de pruebas...';
-        const indexResponse = await fetch(URLS.testIndex);
-        if (!indexResponse.ok) throw new Error(`No se pudo cargar test_index.json: ${indexResponse.statusText}`);
-        TEST_INDEX = await indexResponse.json();
-
-        // 2. Cargar la base de datos de puntajes (CSV)
-        loadingMessage.textContent = 'Cargando historial de puntajes...';
-        const scoresData = await fetchAndParseCSV(URLS.scoresDatabase);
-        // Limpiar datos: asegurar que los puntajes sean números
-        SCORES_DB = scoresData.map(score => ({
-            ...score,
-            global_score: parseInt(score.global_score, 10) || 0,
-            mat_score: parseInt(score.mat_score, 10) || 0,
-            lec_score: parseInt(score.lec_score, 10) || 0,
-            soc_score: parseInt(score.soc_score, 10) || 0,
-            cie_score: parseInt(score.cie_score, 10) || 0,
-            ing_score: parseInt(score.ing_score, 10) || 0,
-        })).filter(score => score.doc_number); // Filtrar filas vacías
-
-        // 3. Cargar la base de datos de estudiantes (CSV)
-        loadingMessage.textContent = 'Cargando base de datos de estudiantes...';
-        const studentData = await fetchAndParseCSV(URLS.studentDatabase);
-        
-        // (v5.4) Procesar y limpiar los datos de estudiantes
-        processStudentData(studentData);
-
-        // 4. Éxito: Ocultar carga y mostrar login
-        loadingScreen.style.display = 'none';
-        loginScreen.style.display = 'block';
-
-    } catch (error) {
-        console.error('Error fatal durante la carga de datos:', error);
-        loadingMessage.textContent = 'Error al cargar datos.';
-        loadingError.textContent = `${error.message}. Revisa la consola y recarga la página.`;
-        loadingError.style.display = 'block';
-    }
-}
-
-/**
- * (v5.4) Procesa, limpia (trim) y almacena los datos de estudiantes.
- */
-function processStudentData(studentData) {
-    STUDENT_DB = {};
-    ALL_STUDENTS_ARRAY = [];
-    
-    studentData.forEach(originalStudent => {
-        const student = {};
-        for (const key in originalStudent) {
-            const cleanKey = key.trim(); 
-            if (typeof originalStudent[key] === 'string') {
-                student[cleanKey] = originalStudent[key].trim();
-            } else {
-                student[cleanKey] = originalStudent[key];
-            }
-        }
-        
-        const docNumber = student['Número de Documento'];
-        if (docNumber) {
-            STUDENT_DB[docNumber] = student;
-            ALL_STUDENTS_ARRAY.push(student);
-        }
-    });
-    
-    console.log(`Base de datos de estudiantes cargada y procesada. ${ALL_STUDENTS_ARRAY.length} registros.`);
-}
-
-
-// --- 2. MANEJO DE EVENTOS (LISTENERS) ---
-
-/**
- * Configura todos los listeners de eventos principales de la aplicación.
- * (v6) Adaptado para el nuevo layout de Sidebar
- */
-function setupEventListeners() {
-    // --- Selectores (Cache) ---
-    const elements = {
-        // Layout
-        loginForm: document.getElementById('login-form'),
-        logoutButton: document.getElementById('logout-button'),
-        sidebar: document.getElementById('sidebar'),
-        mobileSidebarToggle: document.getElementById('mobile-sidebar-toggle'),
-        backToDashboardBtn: document.getElementById('back-to-dashboard-btn'),
-
-        // Navegación Sidebar (v6)
-        navStudentDashboard: document.getElementById('nav-student-dashboard'),
-        navAdminDashboard: document.getElementById('nav-admin-dashboard'),
-        navAdminStudents: document.getElementById('nav-admin-students'),
-        navAdminStats: document.getElementById('nav-admin-stats'),
-        navAdminCrud: document.getElementById('nav-admin-crud'),
-        
-        // Login
-        togglePassword: document.getElementById('toggle-password'),
-        
-        // Dashboard Estudiante
-        studentReportsGrid: document.getElementById('student-reports-grid'),
-        growthChartFilters: document.getElementById('growth-chart-filters'),
-        
-        // Dashboard Admin (General)
-        adminSearchInput: document.getElementById('admin-search-input'),
-        adminTableBody: document.getElementById('admin-table-body'),
-        adminPaginationControls: document.getElementById('admin-pagination-controls'),
-        
-        // Admin (Análisis Estadístico)
-        statsAnalyzeBtn: document.getElementById('stats-analyze-btn'),
-        statsTestSelect: document.getElementById('stats-test-select'),
-        
-        // Admin (CRUD)
-        addStudentForm: document.getElementById('add-student-form'),
-        
-        // Modales
-        adminModalBackdrop: document.getElementById('admin-modal-backdrop'),
-        adminModalCloseBtn: document.getElementById('admin-modal-close-btn'),
-        adminModalBody: document.getElementById('admin-modal-body'),
-        githubTokenModal: document.getElementById('github-token-modal'),
-        cancelTokenBtn: document.getElementById('cancel-token-btn'),
-        confirmTokenBtn: document.getElementById('confirm-token-btn'),
-    };
-
-    // --- Asignación de Listeners (con Encadenamiento Opcional '?.') ---
+function initializeDOMQueries() {
+    // Pantallas principales
+    elements.globalLoader = document.getElementById('global-loader');
+    elements.loadingError = document.getElementById('loading-error-message');
+    elements.loginScreen = document.getElementById('login-screen');
+    elements.appContainer = document.getElementById('app-container');
 
     // Formulario de Login
+    elements.loginForm = document.getElementById('login-form');
+    elements.docType = document.getElementById('doc-type');
+    elements.docNumber = document.getElementById('doc-number');
+    elements.password = document.getElementById('password');
+    elements.togglePassword = document.getElementById('toggle-password');
+    elements.eyeIcon = document.getElementById('eye-icon');
+    elements.eyeOffIcon = document.getElementById('eye-off-icon');
+    elements.loginError = document.getElementById('login-error');
+
+    // Layout Principal (Sidebar y Header)
+    elements.sidebar = document.getElementById('sidebar');
+    elements.sidebarOverlay = document.getElementById('sidebar-overlay');
+    elements.sidebarCloseBtn = document.getElementById('sidebar-close-btn');
+    elements.sidebarOpenBtn = document.getElementById('sidebar-open-btn');
+    elements.mainContent = document.getElementById('main-content');
+    elements.mainContentTitle = document.getElementById('main-content-title');
+    elements.userNameHeader = document.getElementById('user-name-header');
+    elements.userRoleHeader = document.getElementById('user-role-header');
+    elements.userAvatarHeader = document.getElementById('user-avatar-header');
+    elements.logoutBtn = document.getElementById('logout-btn');
+    elements.navLinks = document.querySelectorAll('.nav-link');
+    elements.navSections = {
+        student: document.querySelectorAll('.nav-section.student-nav'),
+        admin: document.querySelectorAll('.nav-section.admin-nav')
+    };
+
+    // Secciones de Contenido
+    elements.appSections = document.querySelectorAll('.app-section');
+    elements.studentDashboard = document.getElementById('student-dashboard-section');
+    elements.studentReport = document.getElementById('student-report-section');
+    elements.adminDashboard = document.getElementById('admin-dashboard-section');
+    elements.adminStudents = document.getElementById('admin-students-section');
+    elements.adminStats = document.getElementById('admin-stats-section');
+    elements.adminCrud = document.getElementById('admin-crud-section');
+    
+    // Dashboard Estudiante
+    elements.studentReportsContainer = document.getElementById('student-reports-container');
+    elements.showGrowthChartBtn = document.getElementById('show-growth-chart-btn');
+
+    // Informe Individual Estudiante
+    elements.backToDashboardBtn = document.getElementById('back-to-dashboard-btn');
+    elements.reportTitle = document.getElementById('report-title');
+    elements.reportDate = document.getElementById('report-date');
+    elements.reportContentContainer = document.getElementById('report-content-container');
+
+    // Dashboard Admin (KPIs y Gráficos)
+    elements.kpiTotalStudents = document.getElementById('kpi-total-students');
+    elements.kpiAvgGlobal = document.getElementById('kpi-avg-global');
+    elements.kpiAvgSimulacros = document.getElementById('kpi-avg-simulacros');
+    elements.kpiAvgMinis = document.getElementById('kpi-avg-minis');
+    elements.adminAvgSubjectsChart = document.getElementById('admin-avg-subjects-chart');
+    elements.adminGlobalScoreDistChart = document.getElementById('admin-global-score-dist-chart');
+
+    // Gestión Estudiantes (Admin)
+    elements.adminStudentSearch = document.getElementById('admin-student-search');
+    elements.adminPaginationControls = document.getElementById('admin-pagination-controls');
+    elements.adminStudentTableBody = document.getElementById('admin-student-table-body');
+    elements.adminNoResults = document.getElementById('admin-no-results');
+    elements.adminTableHeaders = document.querySelectorAll('#admin-students-section .table-header');
+
+    // Análisis de Ítems (Admin)
+    elements.statsTestSelect = document.getElementById('stats-test-select');
+    elements.statsSubjectFilter = document.getElementById('stats-subject-filter');
+    elements.statsAnalyzeBtn = document.getElementById('stats-analyze-btn');
+    elements.statsLoading = document.getElementById('stats-loading');
+    elements.statsResultsContainer = document.getElementById('stats-results-container');
+    elements.statsResultsTitle = document.getElementById('stats-results-title');
+    elements.statsResultsCardsContainer = document.getElementById('stats-results-cards-container');
+
+    // CRUD (Admin)
+    elements.addStudentForm = document.getElementById('add-student-form');
+    elements.pendingChangesContainer = document.getElementById('pending-changes-container');
+    elements.noPendingChanges = document.getElementById('no-pending-changes');
+    elements.clearCacheBtn = document.getElementById('clear-cache-btn');
+    elements.saveChangesBtn = document.getElementById('save-changes-btn');
+
+    // Modals
+    elements.growthChartModal = document.getElementById('growth-chart-modal');
+    elements.growthChartFilters = document.getElementById('growth-chart-filters');
+    elements.growthChartCanvas = document.getElementById('growthChart');
+    
+    elements.adminStudentModal = document.getElementById('admin-student-modal');
+    elements.adminStudentModalTitle = document.getElementById('admin-student-modal-title');
+    elements.adminStudentModalBody = document.getElementById('admin-student-modal-body');
+
+    elements.githubTokenModal = document.getElementById('github-token-modal');
+    elements.githubTokenInput = document.getElementById('github-token-input');
+    elements.githubTokenError = document.getElementById('github-token-error');
+    elements.githubTokenConfirmBtn = document.getElementById('github-token-confirm-btn');
+    
+    elements.modalCloseBtns = document.querySelectorAll('.modal-close-btn');
+}
+
+/**
+ * Configura todos los event listeners para la aplicación.
+ */
+function setupEventListeners() {
+    // Login
     elements.loginForm?.addEventListener('submit', handleLogin);
-
-    // Ver/Ocultar Contraseña
     elements.togglePassword?.addEventListener('click', togglePasswordVisibility);
-    
-    // --- Navegación Principal (v6) ---
-    elements.logoutButton?.addEventListener('click', logout);
-    elements.backToDashboardBtn?.addEventListener('click', () => {
-        if (globalStudentRole === 'admin') {
-            showAdminDashboard();
-        } else {
-            showStudentDashboard();
+
+    // Navegación Principal (Sidebar y Header)
+    elements.sidebarOpenBtn?.addEventListener('click', openSidebar);
+    elements.sidebarCloseBtn?.addEventListener('click', closeSidebar);
+    elements.sidebarOverlay?.addEventListener('click', closeSidebar);
+    elements.logoutBtn?.addEventListener('click', handleLogout);
+
+    // Navegación de Secciones
+    elements.navLinks?.forEach(link => {
+        link.addEventListener('click', (e) => handleNavigation(e, link.id));
+    });
+
+    // Dashboard Estudiante
+    elements.showGrowthChartBtn?.addEventListener('click', () => showModal(elements.growthChartModal));
+    elements.studentReportsContainer?.addEventListener('click', (e) => {
+        const card = e.target.closest('.report-card');
+        if (card && card.dataset.testid) {
+            showIndividualReport(card.dataset.testid);
         }
     });
 
-    // Toggle de Sidebar Móvil (v6)
-    elements.mobileSidebarToggle?.addEventListener('click', toggleMobileSidebar);
+    // Informe Individual
+    elements.backToDashboardBtn?.addEventListener('click', () => showStudentDashboard());
 
-    // Clic en el overlay para cerrar sidebar móvil
-    document.body.addEventListener('click', (e) => {
-        if (e.target.id === 'sidebar-overlay') {
-            toggleMobileSidebar(false); // Forzar cierre
-        }
-    });
-
-    // Navegación del Sidebar (v6)
-    elements.navStudentDashboard?.addEventListener('click', (e) => { e.preventDefault(); showStudentDashboard(); });
-    elements.navAdminDashboard?.addEventListener('click', (e) => { e.preventDefault(); showAdminDashboard(); });
-    elements.navAdminStudents?.addEventListener('click', (e) => { e.preventDefault(); showAdminStudentsPanel(); });
-    elements.navAdminStats?.addEventListener('click', (e) => { e.preventDefault(); showAdminStatsPanel(); });
-    elements.navAdminCrud?.addEventListener('click', (e) => { e.preventDefault(); showAdminCrudPanel(); });
-
-    // --- Dashboard Estudiante ---
-    
-    // Clic en "Ver Informe" (Tarjeta de informe)
-    elements.studentReportsGrid?.addEventListener('click', (e) => {
-        const card = e.target.closest('.report-card[data-testid]');
-        if (card) {
-            const testId = card.dataset.testid;
-            showIndividualReport(testId);
-        }
-    });
-
-    // (v5.1) Filtros del Gráfico de Crecimiento
-    elements.growthChartFilters?.addEventListener('click', (e) => {
-        if (e.target.classList.contains('chart-filter-btn')) {
-            elements.growthChartFilters.querySelectorAll('.chart-filter-btn').forEach(btn => btn.classList.remove('active'));
-            e.target.classList.add('active');
-            const filterType = e.target.dataset.filter;
-            renderGrowthChart(CURRENT_STUDENT_REPORTS, filterType);
-        }
-    });
-
-    // --- Dashboard Admin ---
-
-    // Búsqueda en tabla de estudiantes
-    elements.adminSearchInput?.addEventListener('input', () => {
+    // Dashboard Admin (Gestión Estudiantes)
+    elements.adminStudentSearch?.addEventListener('input', (e) => {
+        currentAdminFilter = e.target.value;
         currentAdminPage = 1;
-        renderAdminTable();
+        renderAdminStudentTable();
     });
-
-    // Paginación de tabla de estudiantes
     elements.adminPaginationControls?.addEventListener('click', (e) => {
-        const btn = e.target.closest('.pagination-btn');
-        if (btn && !btn.disabled) {
-            const newPage = parseInt(btn.dataset.page, 10);
-            if (newPage) {
-                currentAdminPage = newPage;
-                renderAdminTable();
-            }
+        if (e.target.dataset.page) {
+            currentAdminPage = parseInt(e.target.dataset.page, 10);
+            renderAdminStudentTable();
         }
     });
-
-    // Ordenar tabla de estudiantes
-    document.querySelector('#admin-students-section table thead')?.addEventListener('click', (e) => {
-        const header = e.target.closest('.table-header');
-        if (header && header.dataset.sort) {
-            const sortKey = header.dataset.sort;
-            if (currentAdminSort.column === sortKey) {
+    elements.adminTableHeaders?.forEach(header => {
+        header.addEventListener('click', () => {
+            const column = header.dataset.sort;
+            if (currentAdminSort.column === column) {
                 currentAdminSort.direction = currentAdminSort.direction === 'asc' ? 'desc' : 'asc';
             } else {
-                currentAdminSort.column = sortKey;
+                currentAdminSort.column = column;
                 currentAdminSort.direction = 'asc';
             }
-            currentAdminPage = 1;
-            renderAdminTable();
-        }
+            renderAdminStudentTable();
+        });
     });
-    
-    // Clic en "Ver" (fila de estudiante)
-    elements.adminTableBody?.addEventListener('click', (e) => {
+    elements.adminStudentTableBody?.addEventListener('click', (e) => {
         const viewButton = e.target.closest('.view-student-history-btn');
         if (viewButton) {
-            const studentId = viewButton.dataset.studentId;
-            showAdminStudentHistory(studentId);
+            showAdminStudentHistory(viewButton.dataset.docNumber);
         }
     });
 
-    // Clic en un informe DENTRO del modal de admin
-    elements.adminModalBody?.addEventListener('click', async (e) => {
-       const card = e.target.closest('.report-card[data-testid]');
-       if (card) {
-           const testId = card.dataset.testid;
-           const docNumber = card.dataset.docNumber;
+    // Dashboard Admin (Análisis de Ítems)
+    elements.statsAnalyzeBtn?.addEventListener('click', handleAnalyzeItems);
 
-           // Simular estado de "estudiante"
-           const tempStudentData = STUDENT_DB[docNumber];
-           const tempStudentReports = SCORES_DB.filter(score => score.doc_number === docNumber);
-           
-           // (v5.1) Guardar estado del admin
-           isAdminViewingReport = true; 
-           
-           // Ocultar modal y mostrar informe
-           closeModal(elements.adminModalBackdrop);
-           await showIndividualReport(testId, tempStudentData, tempStudentReports);
-           
-           // (v5.1) Restaurar estado de admin
-           isAdminViewingReport = false;
-       }
-    });
-
-    // Cerrar modal de admin
-    elements.adminModalCloseBtn?.addEventListener('click', () => closeModal(elements.adminModalBackdrop));
-    elements.adminModalBackdrop?.addEventListener('click', (e) => {
-        if (e.target === elements.adminModalBackdrop) {
-            closeModal(elements.adminModalBackdrop);
-        }
-    });
-
-    // --- Análisis Estadístico ---
-    elements.statsAnalyzeBtn?.addEventListener('click', handleAnalyzeTest);
-
-    // --- CRUD ---
+    // CRUD Admin
     elements.addStudentForm?.addEventListener('submit', handleAddStudentSubmit);
-    
-    // Modales del CRUD
-    elements.cancelTokenBtn?.addEventListener('click', () => {
-        closeModal(elements.githubTokenModal);
-        document.getElementById('github-token-input').value = '';
-        document.getElementById('github-token-error').style.display = 'none';
+    elements.saveChangesBtn?.addEventListener('click', () => showModal(elements.githubTokenModal));
+    elements.githubTokenConfirmBtn?.addEventListener('click', handleSaveChanges);
+    elements.clearCacheBtn?.addEventListener('click', clearPendingChanges);
+    loadPendingChanges(); // Cargar cambios pendientes al inicio
+
+    // Modals
+    elements.modalCloseBtns?.forEach(btn => {
+        btn.addEventListener('click', () => closeModal(btn.closest('.modal-backdrop')));
     });
-    
-    elements.confirmTokenBtn?.addEventListener('click', handleConfirmGithubToken);
+    elements.growthChartFilters?.addEventListener('click', (e) => {
+        if (e.target.classList.contains('chart-filter-btn')) {
+            elements.growthChartFilters.querySelectorAll('.chart-filter-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            renderGrowthChart(e.target.dataset.filter);
+        }
+    });
+    elements.adminStudentModalBody?.addEventListener('click', (e) => {
+        const card = e.target.closest('.report-card');
+        if (card && card.dataset.testid && card.dataset.docnumber) {
+            handleAdminViewReport(card.dataset.docnumber, card.dataset.testid);
+        }
+    });
 }
 
 
-// --- 3. LÓGICA DE AUTENTICACIÓN Y NAVEGACIÓN (v6) ---
+// --- 3. LÓGICA DE CARGA DE DATOS ---
+
+/**
+ * Carga todos los datos base (JSON y CSVs principales) al iniciar la app.
+ */
+async function loadAllData() {
+    try {
+        const [testIndexData, scoresData, studentData] = await Promise.all([
+            fetchJSON(URLS.testIndex),
+            fetchAndParseCSV(URLS.scoresDatabase),
+            fetchAndParseCSV(URLS.studentDatabase)
+        ]);
+
+        // Procesar Test Index
+        TEST_INDEX = testIndexData;
+        console.log("Índice de Pruebas cargado:", TEST_INDEX);
+        
+        // Procesar Scores DB
+        SCORES_DB = scoresData.map(score => ({
+            ...score,
+            global_score: parseInt(score.global_score, 10),
+            mat_score: parseInt(score.mat_score, 10),
+            lec_score: parseInt(score.lec_score, 10),
+            soc_score: parseInt(score.soc_score, 10),
+            cie_score: parseInt(score.cie_score, 10),
+            ing_score: parseInt(score.ing_score, 10)
+        }));
+        console.log("Base de datos de Puntajes cargada:", SCORES_DB.length, "registros");
+
+        // Procesar Student DB
+        ALL_STUDENTS_ARRAY = [];
+        studentData.forEach(student => {
+            // Limpiar datos que vienen del CSV
+            const docNumber = student["Número de Documento"]?.trim();
+            if (docNumber) {
+                const cleanedStudent = {
+                    "Nombre Completo del Estudiante": student["Nombre Completo del Estudiante"]?.trim(),
+                    "Email": student["Email"]?.trim(),
+                    "Tipo de Documento": student["Tipo de Documento"]?.trim(),
+                    "Número de Documento": docNumber,
+                    "Fecha de Nacimiento": student["Fecha de Nacimiento"]?.trim(), // Esta es la contraseña
+                    "Departamento": student["Departamento"]?.trim(),
+                    "Colegio/institución": student["Colegio/institución"]?.trim()
+                };
+                
+                STUDENT_DB[docNumber] = cleanedStudent;
+                ALL_STUDENTS_ARRAY.push(cleanedStudent);
+            }
+        });
+        console.log("Base de datos de Estudiantes cargada:", ALL_STUDENTS_ARRAY.length, "usuarios");
+        filteredAdminStudents = [...ALL_STUDENTS_ARRAY]; // Inicializar filtro de admin
+
+        // Éxito: Ocultar loader y mostrar login
+        elements.globalLoader?.classList.add('opacity-0', 'invisible');
+        elements.loginScreen?.classList.remove('hidden');
+
+    } catch (error) {
+        console.error("Error fatal durante la carga de datos:", error);
+        elements.loadingError?.classList.remove('hidden');
+    }
+}
+
+/**
+ * Función helper para cargar y parsear un archivo JSON.
+ * @param {string} url - La URL del archivo JSON.
+ * @returns {Promise<object>}
+ */
+async function fetchJSON(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Error cargando JSON: ${url}`);
+    return await response.json();
+}
+
+/**
+ * Función helper para cargar y parsear un archivo CSV usando PapaParse.
+ * @param {string} url - La URL del archivo CSV.
+ * @returns {Promise<Array<object>>}
+ */
+function fetchAndParseCSV(url) {
+    return new Promise((resolve, reject) => {
+        Papa.parse(url, {
+            download: true,
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+                if (results.errors.length) {
+                    reject(new Error(`Error parseando CSV: ${results.errors[0].message}`));
+                } else {
+                    resolve(results.data);
+                }
+            },
+            error: (error) => {
+                reject(new Error(`Error descargando CSV: ${error.message}`));
+            }
+        });
+    });
+}
+
+/**
+ * Carga los datos de una prueba específica (claves y respuestas) bajo demanda.
+ * Utiliza caché para evitar recargas.
+ * @param {string} testId - El ID de la prueba (ej. "sg11_07").
+ * @returns {Promise<object>} - Un objeto con los datos de la prueba.
+ */
+async function getTestAnswersAndKey(testId) {
+    // 1. Revisar caché
+    if (CACHED_TEST_DATA[testId]) {
+        return CACHED_TEST_DATA[testId];
+    }
+
+    const testInfo = TEST_INDEX[testId];
+    if (!testInfo) throw new Error(`No se encontró info para la prueba ${testId}`);
+
+    const isSimulacro = testInfo.type === 'simulacro';
+    const dataToLoad = {};
+
+    try {
+        if (isSimulacro) {
+            // Cargar 4 archivos para simulacro
+            const [ans1, ans2, key1, key2] = await Promise.all([
+                fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.answers_s1}`),
+                fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.answers_s2}`),
+                fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.keys_s1}`),
+                fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.keys_s2}`)
+            ]);
+            dataToLoad.answers_s1 = ans1;
+            dataToLoad.answers_s2 = ans2;
+            dataToLoad.key_s1 = key1[0]; // Las claves son solo la primera fila
+            dataToLoad.key_s2 = key2[0];
+        } else {
+            // Cargar 2 archivos para minisimulacro
+            const [ans, key] = await Promise.all([
+                fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.answers}`),
+                fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.keys}`)
+            ]);
+            dataToLoad.answers = ans;
+            dataToLoad.key = key[0];
+        }
+        
+        // Cargar archivo de videos (si existe)
+        if (testInfo.videos) {
+            const videoResponse = await fetch(`${BASE_DATA_URL}${testInfo.videos}?t=${TIMESTAMP}`);
+            if (videoResponse.ok) {
+                dataToLoad.videos = await videoResponse.text();
+            }
+        }
+
+        // 2. Guardar en caché
+        CACHED_TEST_DATA[testId] = dataToLoad;
+        return dataToLoad;
+
+    } catch (error) {
+        console.error(`Error cargando datos para la prueba ${testId}:`, error);
+        throw error;
+    }
+}
+
+
+// --- 4. LÓGICA DE AUTENTICACIÓN Y NAVEGACIÓN ---
 
 /**
  * Maneja el envío del formulario de login.
- * (v5.4) Incluye depuración
  */
 function handleLogin(e) {
     e.preventDefault();
-    const docType = document.getElementById('doc-type').value;
-    const docNumber = document.getElementById('doc-number').value.trim();
-    const password = document.getElementById('password').value.trim();
-    const loginError = document.getElementById('login-error');
+    elements.loginError?.classList.add('hidden');
 
-    // --- Depuración (Paso 1: ¿Qué se está recibiendo?) ---
-    console.log("--- Intento de Login ---");
-    console.log(`Input DocType: [${docType}]`);
-    console.log(`Input DocNumber (admin?): [${docNumber}]`);
-    console.log(`Input Password (fecha?): [${password}]`);
-    console.log(`Comparando con Admin PASS: [${SUPER_USER_CREDENTIALS.password}]`);
+    const docType = elements.docType?.value;
+    const docNumber = elements.docNumber?.value.trim();
+    const password = elements.password?.value.trim();
 
-    // --- Flujo de Admin (Paso 2: Comparación de Admin) ---
+    // 1. Validar Admin
     if (docNumber === SUPER_USER_CREDENTIALS.username && password === SUPER_USER_CREDENTIALS.password) {
-        console.log("¡ÉXITO de Admin!");
-        loginError.style.display = 'none';
-        
-        globalStudentName = "Administrador";
-        globalStudentRole = "admin";
-        
-        showMainLayout(); // (v6) Mostrar layout
-        showAdminDashboard(); // (v6) Mostrar panel
+        CURRENT_USER_ROLE = 'admin';
+        CURRENT_STUDENT_DATA = { "Nombre Completo del Estudiante": "Administrador" };
+        initializeApp();
         return;
     }
 
-    // --- Flujo de Estudiante (Paso 3: Comparación de Estudiante) ---
+    // 2. Validar Estudiante
     const studentData = STUDENT_DB[docNumber];
+    if (studentData && studentData["Tipo de Documento"] === docType && studentData["Fecha de Nacimiento"] === password) {
+        CURRENT_USER_ROLE = 'student';
+        CURRENT_STUDENT_DATA = studentData;
+        // Filtrar solo los reportes de este estudiante
+        CURRENT_STUDENT_REPORTS = SCORES_DB.filter(score => score.doc_number === docNumber);
+        initializeApp();
+        return;
+    }
 
-    if (studentData) {
-        console.log("Estudiante encontrado en DB:", studentData);
-        console.log(`Comparando Password/Fecha: [${studentData['Fecha de Nacimiento']}] === [${password}]`);
+    // 3. Fallo de Login
+    elements.loginError?.classList.remove('hidden');
+    elements.loginForm?.classList.add('animate-shake');
+    setTimeout(() => elements.loginForm?.classList.remove('animate-shake'), 500);
+}
 
-        if (studentData['Tipo de Documento'] === docType && 
-            studentData['Fecha de Nacimiento'] === password) {
-            
-            console.log("¡ÉXITO de Estudiante!");
-            loginError.style.display = 'none';
-            
-            // Guardar datos globales del estudiante
-            CURRENT_STUDENT_DATA = studentData;
-            CURRENT_STUDENT_REPORTS = SCORES_DB.filter(score => score.doc_number === docNumber);
-            globalStudentName = studentData['Nombre Completo del Estudiante'];
-            globalStudentRole = "student";
-
-            showMainLayout(); // (v6) Mostrar layout
-            showStudentDashboard(); // (v6) Mostrar panel
-            return;
-        }
+/**
+ * Inicializa la aplicación después de un login exitoso.
+ */
+function initializeApp() {
+    console.log(`Iniciando sesión como: ${CURRENT_USER_ROLE}`);
+    
+    // Configurar Header
+    const name = CURRENT_STUDENT_DATA["Nombre Completo del Estudiante"];
+    elements.userNameHeader.textContent = name;
+    elements.userAvatarHeader.textContent = name.substring(0, 1).toUpperCase();
+    
+    // Configurar Sidebar y mostrar la app
+    if (CURRENT_USER_ROLE === 'admin') {
+        elements.userRoleHeader.textContent = "Administrador";
+        elements.navSections.admin.forEach(el => el.style.display = 'block');
+        elements.navSections.student.forEach(el => el.style.display = 'none');
+        showAdminDashboard();
     } else {
-        console.log(`Estudiante con DocNumber [${docNumber}] NO encontrado en STUDENT_DB.`);
+        elements.userRoleHeader.textContent = "Estudiante";
+        elements.navSections.admin.forEach(el => el.style.display = 'none');
+        elements.navSections.student.forEach(el => el.style.display = 'block');
+        showStudentDashboard();
     }
 
-    // --- Error (Paso 4: Falla) ---
-    console.log("--- FALLO DE LOGIN ---");
-    loginError.style.display = 'block';
+    // Ocultar login y mostrar app
+    elements.loginScreen?.classList.add('hidden');
+    elements.appContainer?.classList.remove('hidden');
 }
 
 /**
- * (v6) Muestra el layout principal (sidebar + content) y oculta el login.
- * Actualiza el perfil en el sidebar.
+ * Maneja el clic en los enlaces de navegación del sidebar.
  */
-function showMainLayout() {
-    document.getElementById('login-section').style.display = 'none';
-    document.getElementById('dashboard-layout').style.display = 'block';
+function handleNavigation(e, navId) {
+    e.preventDefault();
     
-    // Actualizar perfil del Sidebar
-    document.getElementById('sidebar-username').textContent = globalStudentName;
-    document.getElementById('sidebar-userrole').textContent = globalStudentRole === 'admin' ? 'Administrador' : 'Estudiante';
-    
-    // Configurar visibilidad de navegación del sidebar
-    const isAdmin = globalStudentRole === 'admin';
-    document.getElementById('nav-student-dashboard').style.display = isAdmin ? 'none' : 'flex';
-    document.getElementById('nav-admin-dashboard').style.display = isAdmin ? 'flex' : 'none';
-    document.getElementById('nav-admin-students').style.display = isAdmin ? 'flex' : 'none';
-    document.getElementById('nav-admin-stats').style.display = isAdmin ? 'flex' : 'none';
-    document.getElementById('nav-admin-crud').style.display = isAdmin ? 'flex' : 'none';
+    // Resaltar link activo
+    elements.navLinks.forEach(link => link.classList.remove('active'));
+    document.getElementById(navId)?.classList.add('active');
+
+    // Ocultar todas las secciones
+    elements.appSections.forEach(section => section.classList.add('hidden'));
+
+    // Mostrar la sección correspondiente
+    switch (navId) {
+        // Estudiante
+        case 'nav-student-dashboard':
+            showStudentDashboard();
+            break;
+        case 'nav-student-growth':
+            showModal(elements.growthChartModal);
+            break;
+        // Admin
+        case 'nav-admin-dashboard':
+            showAdminDashboard();
+            break;
+        case 'nav-admin-students':
+            showAdminStudents();
+            break;
+        case 'nav-admin-stats':
+            showAdminStats();
+            break;
+        case 'nav-admin-crud':
+            showAdminCrud();
+            break;
+    }
+
+    closeSidebar(); // Cerrar sidebar en móvil después de navegar
 }
 
 /**
- * (v6) Muestra un panel de contenido específico y actualiza el sidebar.
- * @param {string} panelId El ID de la sección a mostrar (ej. 'student-dashboard-section')
- * @param {string} navId El ID del enlace de navegación a activar (ej. 'nav-student-dashboard')
+ * Maneja el cierre de sesión.
  */
-function showPanel(panelId, navId) {
-    // Ocultar todos los paneles
-    document.querySelectorAll('.dashboard-panel').forEach(section => {
-        section.style.display = 'none';
-    });
-    
-    // Mostrar el panel solicitado
-    const panel = document.getElementById(panelId);
-    if (panel) {
-        panel.style.display = 'block';
-    }
-    
-    // Actualizar estado activo en sidebar
-    document.querySelectorAll('.sidebar-link').forEach(link => {
-        link.classList.remove('active');
-    });
-    const navLink = document.getElementById(navId);
-    if (navLink) {
-        navLink.classList.add('active');
-    }
-    
-    currentActivePanel = panelId;
-    
-    // Cerrar sidebar móvil después de la navegación
-    toggleMobileSidebar(false);
-}
-
-/**
- * Cierra sesión y resetea la aplicación al estado de login.
- */
-function logout(e) {
-    if(e) e.preventDefault();
-    
-    // Limpiar datos
+function handleLogout() {
+    // Limpiar estado
+    CURRENT_USER_ROLE = null;
     CURRENT_STUDENT_DATA = null;
     CURRENT_STUDENT_REPORTS = [];
-    globalStudentName = '';
-    globalStudentRole = '';
-    isAdminViewingReport = false;
+    CACHED_TEST_DATA = {};
     
-    // (v6) Ocultar layout del dashboard y mostrar login
-    document.getElementById('dashboard-layout').style.display = 'none';
-    document.getElementById('login-section').style.display = 'block';
+    // Resetear UI
+    elements.appContainer?.classList.add('hidden');
+    elements.loginScreen?.classList.remove('hidden');
+    elements.loginError?.classList.add('hidden');
+    elements.loginForm?.reset();
     
-    // Ocultar todos los paneles para un reinicio limpio
-    document.querySelectorAll('.dashboard-panel').forEach(section => {
-        section.style.display = 'none';
-    });
-
-    // Limpiar campos de login
-    document.getElementById('login-form').reset();
-    document.getElementById('login-error').style.display = 'none';
-}
-
-/**
- * (v5.3) Muestra/Oculta la contraseña en el formulario de login.
- */
-function togglePasswordVisibility() {
-    const passwordInput = document.getElementById('password');
-    const eyeOpen = document.getElementById('eye-open');
-    const eyeClosed = document.getElementById('eye-closed');
-
-    if (passwordInput.type === 'password') {
-        passwordInput.type = 'text';
-        eyeOpen.classList.add('hidden');
-        eyeClosed.classList.remove('hidden');
-    } else {
-        passwordInput.type = 'password';
-        eyeOpen.classList.remove('hidden');
-        eyeClosed.classList.add('hidden');
-    }
-}
-
-/**
- * (v6) Controla la visibilidad del sidebar en móvil.
- * @param {boolean} [forceOpen] - Opcional. Forzar apertura (true) o cierre (false).
- */
-function toggleMobileSidebar(forceOpen = null) {
-    const sidebar = document.getElementById('sidebar');
-    if (!sidebar) return;
-
-    let isOpen;
-    if (forceOpen !== null) {
-        isOpen = !forceOpen; // Si queremos forzar apertura, fingimos que está cerrado
-    } else {
-        isOpen = sidebar.classList.contains('is-open');
-    }
-
-    if (isOpen) {
-        // Cerrar
-        sidebar.classList.remove('is-open');
-        const overlay = document.getElementById('sidebar-overlay');
-        if (overlay) {
-            overlay.remove();
-        }
-    } else {
-        // Abrir
-        sidebar.classList.add('is-open');
-        const overlay = document.createElement('div');
-        overlay.id = 'sidebar-overlay';
-        overlay.className = 'sidebar-overlay lg:hidden'; // 'lg:hidden' asegura que no se muestre en desktop
-        document.body.appendChild(overlay);
-    }
+    // Ocultar todas las secciones y links de nav
+    elements.appSections.forEach(section => section.classList.add('hidden'));
+    elements.navSections.admin.forEach(el => el.style.display = 'none');
+    elements.navSections.student.forEach(el => el.style.display = 'none');
+    
+    console.log("Sesión cerrada.");
 }
 
 
-// --- 4. LÓGICA DEL DASHBOARD DE ESTUDIANTE ---
+// --- 5. LÓGICA DE RENDERIZADO DE SECCIONES ---
 
 /**
- * Muestra el dashboard del estudiante.
+ * Muestra el Dashboard del Estudiante (lista de informes).
  */
 function showStudentDashboard() {
-    showPanel('student-dashboard-section', 'nav-student-dashboard');
-
-    const grid = document.getElementById('student-reports-grid');
-    grid.innerHTML = ''; // Limpiar
+    elements.mainContentTitle.textContent = "Mis Informes";
+    elements.studentDashboard.classList.remove('hidden');
+    elements.studentReport.classList.add('hidden'); // Ocultar informe individual
     
-    if (!CURRENT_STUDENT_REPORTS || CURRENT_STUDENT_REPORTS.length === 0) {
-        grid.innerHTML = '<p class="text-gray-600 col-span-full">No tienes informes disponibles todavía.</p>';
+    elements.studentReportsContainer.innerHTML = ""; // Limpiar
+    
+    if (CURRENT_STUDENT_REPORTS.length === 0) {
+        elements.studentReportsContainer.innerHTML = `<p class="text-brand-text/80 col-span-full">No tienes informes disponibles.</p>`;
         return;
     }
 
-    // Ordenar por fecha (más reciente primero)
+    // Ordenar por fecha, más reciente primero
     const sortedReports = [...CURRENT_STUDENT_REPORTS].sort((a, b) => new Date(b.test_date) - new Date(a.test_date));
 
     sortedReports.forEach(report => {
         const testInfo = TEST_INDEX[report.test_id];
         if (!testInfo) return; // Omitir si la prueba no está en el índice
 
-        const cardHTML = `
-            <div class="report-card" data-testid="${report.test_id}">
-                <h3 class="text-xl font-bold text-brand-header mb-2">${testInfo.name}</h3>
-                <p class="text-sm text-gray-500 mb-4">Realizado el: ${new Date(report.test_date).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                <div class="mb-5">
-                    <p class="text-sm font-medium text-gray-600">Puntaje Global</p>
-                    <p class="text-5xl font-extrabold text-brand-secondary">${report.global_score}<span class="text-3xl font-medium text-gray-400">/500</span></p>
+        const testTypeLabel = testInfo.type === 'simulacro' ? "Simulacro General" : "Minisimulacro";
+        const testTypeColor = testInfo.type === 'simulacro' ? "bg-blue-100 text-blue-800" : "bg-yellow-100 text-yellow-800";
+
+        elements.studentReportsContainer.innerHTML += `
+            <div class="report-card cursor-pointer" data-testid="${report.test_id}">
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <p class="text-xs font-medium ${testTypeColor} inline-block px-2 py-0.5 rounded-full">${testTypeLabel}</p>
+                        <h3 class="text-lg font-bold text-brand-header mt-2">${testInfo.name}</h3>
+                        <p class="text-sm text-brand-text/80">Realizado el: ${formatDate(report.test_date)}</p>
+                    </div>
+                    <span class="text-3xl font-extrabold text-brand-secondary">${report.global_score}</span>
                 </div>
-                <button class="btn-primary w-full py-3">
-                    Ver Informe Detallado
-                    <i data-lucide="arrow-right" class="ml-2 h-4 w-4"></i>
-                </button>
+                <div class="flex justify-end">
+                    <span class="inline-flex items-center text-sm font-medium text-brand-secondary">
+                        Ver Informe Completo
+                        <i data-lucide="arrow-right" class="w-4 h-4 ml-1"></i>
+                    </span>
+                </div>
             </div>
         `;
-        grid.innerHTML += cardHTML;
     });
 
-    // Renderizar gráfico de crecimiento
-    renderGrowthChart(sortedReports, 'all');
-    
-    // Resetear filtros del gráfico
-    document.querySelectorAll('#growth-chart-filters .chart-filter-btn').forEach(btn => {
-        btn.classList.remove('active');
-        if (btn.dataset.filter === 'all') {
-            btn.classList.add('active');
-        }
-    });
-
-    lucide.createIcons(); // Actualizar iconos
+    lucide.createIcons();
 }
 
 /**
- * (v5.1) Renderiza la gráfica de crecimiento del estudiante.
- * @param {Array} studentReports - Array de reportes del estudiante (DEBE ESTAR PRE-ORDENADO)
- * @param {string} filterType - 'all', 'simulacro', o 'minisimulacro'
+ * Muestra el Dashboard del Administrador (KPIs y gráficos).
  */
-function renderGrowthChart(studentReports, filterType = 'all') {
-    const ctx = document.getElementById('growthChart')?.getContext('2d');
-    if (!ctx) return;
+function showAdminDashboard() {
+    elements.mainContentTitle.textContent = "Dashboard General";
+    elements.adminDashboard.classList.remove('hidden');
 
-    // 1. FILTRAR DATOS
-    const filteredReports = studentReports.filter(report => {
-        const testType = TEST_INDEX[report.test_id]?.type;
-        if (filterType === 'all') return true;
-        return testType === filterType;
+    // 1. Calcular KPIs
+    elements.kpiTotalStudents.textContent = ALL_STUDENTS_ARRAY.length;
+
+    const allScores = SCORES_DB.map(s => s.global_score);
+    const avgGlobal = allScores.length ? (allScores.reduce((a, b) => a + b, 0) / allScores.length).toFixed(0) : 0;
+    elements.kpiAvgGlobal.textContent = avgGlobal;
+
+    const simulacroScores = SCORES_DB.filter(s => TEST_INDEX[s.test_id]?.type === 'simulacro').map(s => s.global_score);
+    const avgSimulacros = simulacroScores.length ? (simulacroScores.reduce((a, b) => a + b, 0) / simulacroScores.length).toFixed(0) : 0;
+    elements.kpiAvgSimulacros.textContent = avgSimulacros;
+
+    const miniScores = SCORES_DB.filter(s => TEST_INDEX[s.test_id]?.type === 'minisimulacro').map(s => s.global_score);
+    const avgMinis = miniScores.length ? (miniScores.reduce((a, b) => a + b, 0) / miniScores.length).toFixed(0) : 0;
+    elements.kpiAvgMinis.textContent = avgMinis;
+
+    // 2. Renderizar Gráficos
+    renderAdminAvgSubjectsChart();
+    renderAdminGlobalScoreDistChart();
+    
+    lucide.createIcons();
+}
+
+/**
+ * Muestra la sección de Gestión de Estudiantes (Admin).
+ */
+function showAdminStudents() {
+    elements.mainContentTitle.textContent = "Gestión de Estudiantes";
+    elements.adminStudents.classList.remove('hidden');
+    renderAdminStudentTable();
+}
+
+/**
+ * Muestra la sección de Análisis de Ítems (Admin).
+ */
+function showAdminStats() {
+    elements.mainContentTitle.textContent = "Análisis de Ítems";
+    elements.adminStats.classList.remove('hidden');
+
+    // Poblar el selector de pruebas
+    elements.statsTestSelect.innerHTML = '<option value="">Seleccione una prueba</option>';
+    for (const testId in TEST_INDEX) {
+        elements.statsTestSelect.innerHTML += `<option value="${testId}">${TEST_INDEX[testId].name}</option>`;
+    }
+}
+
+/**
+ * Muestra la sección de Gestión de Datos (CRUD Admin).
+ */
+function showAdminCrud() {
+    elements.mainContentTitle.textContent = "Gestión de Datos";
+    elements.adminCrud.classList.remove('hidden');
+    lucide.createIcons();
+}
+
+/**
+ * Muestra el informe individual detallado para un estudiante.
+ * @param {string} testId - El ID de la prueba seleccionada.
+ */
+async function showIndividualReport(testId) {
+    elements.mainContentTitle.textContent = "Cargando Informe...";
+    elements.studentDashboard.classList.add('hidden');
+    elements.reportContentContainer.innerHTML = `<div class="text-center py-10"><div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] text-brand-secondary" role="status"></div><p class="mt-3 text-brand-text/80">Cargando datos del informe...</p></div>`;
+    elements.studentReport.classList.remove('hidden');
+
+    try {
+        const testInfo = TEST_INDEX[testId];
+        const report = CURRENT_STUDENT_REPORTS.find(r => r.test_id === testId);
+        
+        if (!testInfo || !report) {
+            throw new Error("No se encontraron datos del informe.");
+        }
+
+        elements.mainContentTitle.textContent = testInfo.name;
+        elements.reportTitle.textContent = testInfo.name;
+        elements.reportDate.textContent = `Realizado el: ${formatDate(report.test_date)}`;
+
+        // Cargar datos de la prueba (respuestas y claves)
+        const testData = await getTestAnswersAndKey(testId);
+
+        // Encontrar la fila de respuestas del estudiante
+        let studentAnswers = null;
+        const docNumber = CURRENT_STUDENT_DATA["Número de Documento"];
+        
+        if (testInfo.type === 'simulacro') {
+            const ans1 = testData.answers_s1.find(r => r.ID === docNumber);
+            const ans2 = testData.answers_s2.find(r => r.ID === docNumber);
+            studentAnswers = { ...ans1, ...ans2 }; // Combinar ambas sesiones
+        } else {
+            studentAnswers = testData.answers.find(r => r.ID === docNumber);
+        }
+
+        if (!studentAnswers) {
+            throw new Error("No se encontraron las respuestas del estudiante para esta prueba.");
+        }
+
+        // Generar HTML del informe
+        const scoreCardsHtml = generateScoreCardsHtml(report);
+        const radarChartHtml = `<div class="bg-brand-surface p-6 rounded-lg shadow-sm border border-brand-border"><h3 class="text-xl font-bold text-brand-header mb-4">Perfil de Desempeño (Radar)</h3><div class="h-80 max-w-lg mx-auto"><canvas id="radarChart"></canvas></div></div>`;
+        const feedbackHtml = generateFeedbackHtml(testInfo, testData, studentAnswers);
+
+        elements.reportContentContainer.innerHTML = `
+            ${scoreCardsHtml}
+            ${radarChartHtml}
+            ${feedbackHtml}
+        `;
+
+        // Renderizar el gráfico de Radar
+        renderRadarChart(report);
+        
+        // Renderizar iconos
+        lucide.createIcons();
+
+    } catch (error) {
+        console.error("Error al mostrar informe individual:", error);
+        elements.reportContentContainer.innerHTML = `<p class="text-brand-red text-center py-10">Error al cargar el informe: ${error.message}</p>`;
+    }
+}
+
+
+// --- 6. LÓGICA DE RENDERIZADO DE COMPONENTES ---
+
+/**
+ * Genera el HTML para las tarjetas de puntaje (Global y por materia).
+ * @param {object} report - El objeto de puntaje de SCORES_DB.
+ * @returns {string} HTML
+ */
+function generateScoreCardsHtml(report) {
+    const subjects = [
+        { name: 'Lectura Crítica', score: report.lec_score, color: 'color-lectura' },
+        { name: 'Matemáticas', score: report.mat_score, color: 'color-matematicas' },
+        { name: 'Sociales', score: report.soc_score, color: 'color-sociales' },
+        { name: 'Ciencias', score: report.cie_score, color: 'color-ciencias' },
+        { name: 'Inglés', score: report.ing_score, color: 'color-ingles' },
+    ];
+
+    let subjectCardsHtml = subjects.map(s => `
+        <div class="score-card" style="--subject-color: var(--${s.color});">
+            <svg class="subject-icon" style="color: var(--subject-color);" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M... (icono genérico o específico) ..."/></svg>
+            <p class="score-value" style="color: var(--subject-color);">${s.score}<span class="text-2xl text-brand-text/50">/100</span></p>
+            <p class="score-label">${s.name}</p>
+        </div>
+    `).join('');
+
+    return `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <!-- Puntaje Global -->
+            <div class="md:col-span-1 bg-brand-surface p-6 rounded-lg shadow-sm border border-brand-border flex flex-col items-center justify-center text-center">
+                <p class="text-sm font-medium text-brand-text/80 uppercase tracking-wide">Puntaje Global</p>
+                <p class="text-7xl font-extrabold text-brand-header my-2">${report.global_score}</p>
+                <p class="text-2xl font-medium text-brand-text/50">/ 500</p>
+            </div>
+            <!-- Puntajes por Materia -->
+            <div class="md:col-span-2 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                ${subjectCardsHtml}
+            </div>
+        </div>
+    `;
+    // Nota: El SVG del icono de materia debe ser reemplazado por los SVGs reales.
+    // Por simplicidad, se omite aquí, pero la lógica de color es correcta.
+}
+
+/**
+ * Genera el HTML para la tabla de retroalimentación (preguntas).
+ * @param {object} testInfo - Info de TEST_INDEX.
+ * @param {object} testData - Datos de la prueba (claves, etc.).
+ * @param {object} studentAnswers - Fila de respuestas del estudiante.
+ * @returns {string} HTML
+ */
+function generateFeedbackHtml(testInfo, testData, studentAnswers) {
+    let feedbackHtml = "";
+    
+    if (testInfo.type === 'simulacro') {
+        // Generar 2 tablas con pestañas
+        const tableS1 = generateFeedbackTable(testData.key_s1, studentAnswers);
+        const tableS2 = generateFeedbackTable(testData.key_s2, studentAnswers);
+        feedbackHtml = `
+            <div class="bg-brand-surface p-6 rounded-lg shadow-sm border border-brand-border">
+                <h3 class="text-xl font-bold text-brand-header mb-4">Feedback Detallado por Pregunta</h3>
+                <!-- Pestañas -->
+                <div class="border-b border-brand-border">
+                    <nav class="-mb-px flex gap-6" id="feedback-tabs">
+                        <button class="tab-btn active" data-tab="s1">Sesión 1</button>
+                        <button class="tab-btn" data-tab="s2">Sesión 2</button>
+                    </nav>
+                </div>
+                <!-- Contenido Pestañas -->
+                <div id="tab-content-s1" class="tab-content py-4">${tableS1}</div>
+                <div id="tab-content-s2" class="tab-content py-4 hidden">${tableS2}</div>
+            </div>
+        `;
+    } else {
+        // Generar 1 tabla (minisimulacro)
+        const table = generateFeedbackTable(testData.key, studentAnswers);
+        feedbackHtml = `
+            <div class="bg-brand-surface p-6 rounded-lg shadow-sm border border-brand-border">
+                <h3 class="text-xl font-bold text-brand-header mb-4">Feedback Detallado por Pregunta</h3>
+                <div class="py-4">${table}</div>
+            </div>
+        `;
+    }
+
+    // Registrar listeners para las pestañas (si existen)
+    setTimeout(() => {
+        document.getElementById('feedback-tabs')?.addEventListener('click', (e) => {
+            if (e.target.classList.contains('tab-btn')) {
+                const tabId = e.target.dataset.tab;
+                document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                e.target.classList.add('active');
+                
+                document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+                document.getElementById(`tab-content-${tabId}`)?.classList.remove('hidden');
+            }
+        });
+    }, 0);
+
+    return feedbackHtml;
+}
+
+/**
+ * Helper que genera el HTML de la tabla de preguntas.
+ * @param {object} key - Objeto de claves (ej. testData.key_s1).
+ * @param {object} answers - Objeto de respuestas del estudiante.
+ * @returns {string} HTML de la tabla
+ */
+function generateFeedbackTable(key, answers) {
+    let rowsHtml = "";
+    const headers = Object.keys(key);
+
+    for (const header of headers) {
+        if (!header) continue; // Saltar cabeceras vacías
+
+        const studentAns = answers[header]?.trim() || "---";
+        const correctAns = key[header]?.trim() || "N/A";
+        const isCorrect = studentAns === correctAns;
+
+        const icon = isCorrect 
+            ? `<i data-lucide="check-circle" class="icon-correct"></i>`
+            : `<i data-lucide="x-circle" class="icon-incorrect"></i>`;
+        
+        rowsHtml += `
+            <tr class="border-b border-brand-border last:border-b-0 hover:bg-brand-bg">
+                <td class="table-cell font-medium text-brand-header">${header}</td>
+                <td class="table-cell text-center">${studentAns}</td>
+                <td class="table-cell text-center font-bold text-brand-green">${correctAns}</td>
+                <td class="table-cell text-center">${icon}</td>
+            </tr>
+        `;
+    }
+
+    return `
+        <div class="overflow-x-auto border border-brand-border rounded-lg">
+            <table class="w-full min-w-max feedback-table">
+                <thead>
+                    <tr>
+                        <th class="w-1/2">Pregunta</th>
+                        <th class="text-center">Tu Respuesta</th>
+                        <th class="text-center">Resp. Correcta</th>
+                        <th class="text-center">Resultado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+/**
+ * Renderiza la tabla de estudiantes del panel de admin con paginación y filtros.
+ */
+function renderAdminStudentTable() {
+    const tableBody = elements.adminStudentTableBody;
+    if (!tableBody) return;
+
+    tableBody.innerHTML = ""; // Limpiar tabla
+
+    // 1. Aplicar Filtro (Búsqueda)
+    const filterText = currentAdminFilter.toLowerCase();
+    filteredAdminStudents = ALL_STUDENTS_ARRAY.filter(student => {
+        return student["Nombre Completo del Estudiante"].toLowerCase().includes(filterText) ||
+               student["Número de Documento"].includes(filterText);
     });
 
-    // 2. PREPARAR DATOS PARA CHART.JS
-    const chartData = filteredReports.map(report => ({
-        x: new Date(report.test_date).valueOf(), // Usar timestamp para Chart.js
-        y: parseInt(report.global_score, 10)
-    }));
-    
-    // Invertir datos para que la fecha más antigua esté primero (Chart.js lo prefiere)
-    chartData.reverse(); 
+    // 2. Aplicar Ordenamiento
+    filteredAdminStudents.sort((a, b) => {
+        const valA = a[currentAdminSort.column] || '';
+        const valB = b[currentAdminSort.column] || '';
+        
+        if (valA < valB) return currentAdminSort.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return currentAdminSort.direction === 'asc' ? 1 : -1;
+        return 0;
+    });
 
-    // 3. RENDERIZAR GRÁFICO
+    // 3. Aplicar Paginación
+    const totalPages = Math.ceil(filteredAdminStudents.length / adminRowsPerPage);
+    const startIndex = (currentAdminPage - 1) * adminRowsPerPage;
+    const endIndex = startIndex + adminRowsPerPage;
+    const paginatedStudents = filteredAdminStudents.slice(startIndex, endIndex);
+
+    // 4. Renderizar Filas
+    if (paginatedStudents.length === 0) {
+        elements.adminNoResults.classList.remove('hidden');
+    } else {
+        elements.adminNoResults.classList.add('hidden');
+        paginatedStudents.forEach(student => {
+            tableBody.innerHTML += `
+                <tr class="table-row">
+                    <td class="table-cell font-medium text-brand-header">${student["Nombre Completo del Estudiante"]}</td>
+                    <td class="table-cell text-brand-text/90">${student["Tipo de Documento"]} - ${student["Número de Documento"]}</td>
+                    <td class="table-cell text-brand-text/90">${student["Email"]}</td>
+                    <td class="table-cell text-brand-text/90">${student["Colegio/institución"]}</td>
+                    <td class="table-cell text-center">
+                        <button class="button-secondary text-xs !py-1 !px-2 view-student-history-btn" data-doc-number="${student["Número de Documento"]}">
+                            <i data-lucide="eye" class="w-4 h-4"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    // 5. Renderizar Controles de Paginación
+    renderAdminPagination(totalPages);
+    
+    // 6. Actualizar Iconos
+    lucide.createIcons();
+}
+
+/**
+ * Renderiza los botones de paginación para la tabla de admin.
+ */
+function renderAdminPagination(totalPages) {
+    const pagination = elements.adminPaginationControls;
+    if (!pagination) return;
+    
+    pagination.innerHTML = "";
+    if (totalPages <= 1) return;
+
+    // Botón "Anterior"
+    pagination.innerHTML += `
+        <button class="px-3 py-1 border border-brand-border rounded-md ${currentAdminPage === 1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-brand-bg'}" 
+                data-page="${currentAdminPage - 1}" ${currentAdminPage === 1 ? 'disabled' : ''}>
+            Ant.
+        </button>
+    `;
+
+    // Indicador de página
+    pagination.innerHTML += `
+        <span class="text-sm text-brand-text/80 px-2">
+            Página ${currentAdminPage} de ${totalPages}
+        </span>
+    `;
+
+    // Botón "Siguiente"
+    pagination.innerHTML += `
+        <button class="px-3 py-1 border border-brand-border rounded-md ${currentAdminPage === totalPages ? 'opacity-50 cursor-not-allowed' : 'hover:bg-brand-bg'}" 
+                data-page="${currentAdminPage + 1}" ${currentAdminPage === totalPages ? 'disabled' : ''}>
+            Sig.
+        </button>
+    `;
+}
+
+/**
+ * Muestra el historial de informes de un estudiante en un modal (para Admin).
+ */
+function showAdminStudentHistory(docNumber) {
+    const student = STUDENT_DB[docNumber];
+    if (!student) return;
+
+    elements.adminStudentModalTitle.textContent = `Historial de: ${student["Nombre Completo del Estudiante"]}`;
+    elements.adminStudentModalBody.innerHTML = ""; // Limpiar
+
+    const studentReports = SCORES_DB.filter(score => score.doc_number === docNumber)
+                                     .sort((a, b) => new Date(b.test_date) - new Date(a.test_date));
+
+    if (studentReports.length === 0) {
+        elements.adminStudentModalBody.innerHTML = `<p class="text-brand-text/80 text-center py-4">Este estudiante no tiene informes.</p>`;
+    } else {
+        studentReports.forEach(report => {
+            const testInfo = TEST_INDEX[report.test_id];
+            if (!testInfo) return;
+
+            elements.adminStudentModalBody.innerHTML += `
+                <div class="report-card cursor-pointer" data-testid="${report.test_id}" data-docnumber="${docNumber}">
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <h3 class="text-lg font-bold text-brand-header">${testInfo.name}</h3>
+                            <p class="text-sm text-brand-text/80">Realizado el: ${formatDate(report.test_date)}</p>
+                        </div>
+                        <span class="text-3xl font-extrabold text-brand-secondary">${report.global_score}</span>
+                    </div>
+                    <div class="flex justify-end">
+                        <span class="inline-flex items-center text-sm font-medium text-brand-secondary">
+                            Suplantar y Ver Informe
+                            <i data-lucide="arrow-right" class="w-4 h-4 ml-1"></i>
+                        </span>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    lucide.createIcons();
+    showModal(elements.adminStudentModal);
+}
+
+/**
+ * Maneja el clic de "Ver Informe" desde el modal de admin (Suplantación).
+ */
+async function handleAdminViewReport(docNumber, testId) {
+    // 1. Establecer temporalmente el estado como si fuéramos el estudiante
+    CURRENT_STUDENT_DATA = STUDENT_DB[docNumber];
+    CURRENT_STUDENT_REPORTS = SCORES_DB.filter(score => score.doc_number === docNumber);
+    
+    // 2. Cerrar el modal y mostrar el informe
+    closeModal(elements.adminStudentModal);
+    await showIndividualReport(testId);
+
+    // 3. Importante: Limpiar el estado para volver a ser admin
+    // Usamos setTimeout para asegurar que la navegación se complete
+    setTimeout(() => {
+        CURRENT_STUDENT_DATA = { "Nombre Completo del Estudiante": "Administrador" };
+        CURRENT_STUDENT_REPORTS = [];
+    }, 1000);
+}
+
+
+// --- 7. LÓGICA DE GRÁFICOS (CHART.JS) ---
+
+/**
+ * Renderiza el gráfico de progreso del estudiante (en el modal).
+ * @param {string} filterType - 'all', 'simulacro', 'minisimulacro'.
+ */
+function renderGrowthChart(filterType = 'all') {
+    const ctx = elements.growthChartCanvas?.getContext('2d');
+    if (!ctx) return;
+
+    // 1. Filtrar datos
+    const filteredReports = CURRENT_STUDENT_REPORTS
+        .filter(report => {
+            const testType = TEST_INDEX[report.test_id]?.type;
+            if (filterType === 'all') return true;
+            return testType === filterType;
+        })
+        .sort((a, b) => new Date(a.test_date) - new Date(b.test_date)); // Orden cronológico
+
+    // 2. Preparar datos
+    const chartData = filteredReports.map(report => ({
+        x: new Date(report.test_date),
+        y: report.global_score
+    }));
+    const labels = filteredReports.map(report => TEST_INDEX[report.test_id]?.name || 'Prueba');
+
+    // 3. Destruir gráfico anterior
     if (window.myGrowthChart instanceof Chart) {
         window.myGrowthChart.destroy();
     }
 
+    // 4. Renderizar nuevo gráfico
     window.myGrowthChart = new Chart(ctx, {
         type: 'line',
         data: {
+            labels: labels, // Usado para tooltips
             datasets: [{
                 label: 'Puntaje Global',
                 data: chartData,
+                fill: false,
                 borderColor: 'var(--brand-secondary)',
-                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                fill: true,
-                tension: 0.3,
-                borderWidth: 3,
-                pointBackgroundColor: 'var(--brand-secondary)',
-                pointRadius: 5,
-                pointHoverRadius: 7
+                backgroundColor: 'var(--brand-secondary)',
+                tension: 0.1,
+                borderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 6,
             }]
         },
         options: {
@@ -654,140 +1094,59 @@ function renderGrowthChart(studentReports, filterType = 'all') {
                     type: 'time',
                     time: {
                         unit: 'month',
-                        tooltipFormat: 'dd MMM yyyy',
+                        tooltipFormat: 'dd/MM/yyyy',
                         displayFormats: {
                             month: 'MMM yyyy'
                         }
                     },
                     title: {
                         display: true,
-                        text: 'Fecha de la Prueba'
+                        text: 'Fecha'
                     },
-                    grid: {
-                        display: false
+                    ticks: {
+                        display: false // Ocultar fechas en el eje X
                     }
                 },
                 y: {
+                    beginAtZero: false,
+                    min: Math.max(0, Math.min(...chartData.map(d => d.y)) - 20),
+                    max: Math.min(500, Math.max(...chartData.map(d => d.y)) + 20),
                     title: {
                         display: true,
                         text: 'Puntaje Global (0-500)'
-                    },
-                    min: 0,
-                    max: 500,
-                    grid: {
-                        color: '#e5e7eb' // brand-border
                     }
                 }
             },
             plugins: {
-                legend: {
-                    display: false
-                },
                 tooltip: {
-                    mode: 'index',
-                    intersect: false,
-                    padding: 12,
-                    titleFont: { weight: 'bold' },
-                    bodyFont: { size: 14 },
                     callbacks: {
                         title: (tooltipItems) => {
-                            const date = new Date(tooltipItems[0].parsed.x);
-                            return date.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+                            // Mostrar nombre de la prueba en el tooltip
+                            return tooltipItems[0].label;
                         },
                         label: (tooltipItem) => {
-                            return ` Puntaje: ${tooltipItem.parsed.y}`;
+                            return `Puntaje: ${tooltipItem.raw.y}`;
                         }
                     }
                 }
-            },
-            interaction: {
-                mode: 'nearest',
-                axis: 'x',
-                intersect: false
             }
         }
     });
 }
 
-
-// --- 5. LÓGICA DEL INFORME INDIVIDUAL ---
-
 /**
- * Muestra el informe detallado de una prueba específica.
- * (v5.1) Modificado para aceptar datos de estudiante (para suplantación de admin)
- * @param {string} testId
- * @param {Object} [studentData=CURRENT_STUDENT_DATA] - Datos del estudiante (opcional)
- * @param {Array} [studentReports=CURRENT_STUDENT_REPORTS] - Reportes del estudiante (opcional)
+ * Renderiza el gráfico de Radar en el informe individual.
+ * @param {object} report - El objeto de puntaje de SCORES_DB.
  */
-async function showIndividualReport(testId, studentData = CURRENT_STUDENT_DATA, studentReports = CURRENT_STUDENT_REPORTS) {
-    // (v6) Mostrar el panel de informe
-    showPanel('report-content-section', ''); // No hay enlace de sidebar para esto
-    
-    const reportHeader = document.getElementById('report-header');
-    const reportBody = document.getElementById('report-body-content');
-    const backBtn = document.getElementById('back-to-dashboard-btn');
-
-    // Configurar botón de "Volver"
-    backBtn.style.display = 'block';
-    
-    // Mostrar estado de carga
-    reportHeader.querySelector('h1').textContent = 'Cargando informe...';
-    reportHeader.querySelector('p').textContent = '';
-    reportBody.innerHTML = `
-        <div class="text-center py-10">
-            <svg class="animate-spin h-8 w-8 text-brand-secondary mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <p class="mt-3 text-gray-600">Cargando datos de la prueba...</p>
-        </div>`;
-
-    try {
-        const testInfo = TEST_INDEX[testId];
-        const report = studentReports.find(r => r.test_id === testId);
-        if (!testInfo || !report || !studentData) {
-            throw new Error("No se encontraron los datos del informe.");
-        }
-
-        // Cargar datos de la prueba (claves y respuestas)
-        const { keys, answers } = await getTestAnswersAndKey(testId, studentData['Número de Documento']);
-        
-        // Cargar videos de retroalimentación
-        const videoLinks = await getTestVideoLinks(testId);
-
-        // Actualizar cabecera
-        reportHeader.querySelector('h1').textContent = testInfo.name;
-        reportHeader.querySelector('p').textContent = `Realizado el: ${new Date(report.test_date).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}`;
-        
-        // Generar HTML del informe
-        const reportHTML = generateReportHTML(report, keys, answers, videoLinks, testId);
-        reportBody.innerHTML = reportHTML;
-
-        // Renderizar el Gráfico de Radar (Mejora 2)
-        renderRadarChart(report, testId);
-        
-        // Inicializar iconos y listeners de los acordeones
-        lucide.createIcons();
-        setupAccordionListeners();
-
-    } catch (error) {
-        console.error("Error al mostrar informe individual:", error);
-        reportBody.innerHTML = `<p class="text-brand-red text-center">Error al cargar el informe: ${error.message}</p>`;
-    }
-}
-
-/**
- * (v5.1) Renderiza el Gráfico de Radar para el informe.
- */
-function renderRadarChart(report, testId) {
-    const radarCtx = document.getElementById('radarChart')?.getContext('2d');
-    if (!radarCtx || !report) return;
+function renderRadarChart(report) {
+    const ctx = document.getElementById('radarChart')?.getContext('2d');
+    if (!ctx) return;
 
     if (window.myRadarChart instanceof Chart) {
         window.myRadarChart.destroy();
     }
     
-    window.myRadarChart = new Chart(radarCtx, {
+    window.myRadarChart = new Chart(ctx, {
         type: 'radar',
         data: {
             labels: ['Matemáticas', 'Lectura Crítica', 'Sociales', 'Ciencias', 'Inglés'],
@@ -800,23 +1159,20 @@ function renderRadarChart(report, testId) {
                     report.cie_score,
                     report.ing_score
                 ],
-                backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                borderColor: 'rgba(59, 130, 246, 1)',
+                backgroundColor: 'rgba(59, 130, 246, 0.2)', // brand-secondary con alpha
+                borderColor: 'rgba(59, 130, 246, 1)',     // brand-secondary
                 borderWidth: 2,
                 pointBackgroundColor: 'rgba(59, 130, 246, 1)',
-                pointBorderColor: '#fff',
-                pointHoverBackgroundColor: '#fff',
-                pointHoverBorderColor: 'rgba(59, 130, 246, 1)'
             }]
         },
         options: {
             responsive: true,
-            maintainAspectRatio: true,
+            maintainAspectRatio: false,
             scales: {
                 r: {
                     angleLines: { color: 'rgba(0, 0, 0, 0.1)' },
                     grid: { color: 'rgba(0, 0, 0, 0.1)' },
-                    pointLabels: { font: { size: 13, weight: '600' } },
+                    pointLabels: { font: { size: 13, weight: '500' } },
                     ticks: {
                         beginAtZero: true,
                         min: 0,
@@ -829,7 +1185,7 @@ function renderRadarChart(report, testId) {
             },
             plugins: {
                 legend: {
-                    display: false
+                    display: false // Ocultar leyenda
                 }
             }
         }
@@ -837,407 +1193,46 @@ function renderRadarChart(report, testId) {
 }
 
 /**
- * Genera el HTML completo para el cuerpo de un informe.
+ * Renderiza el gráfico de barras de Promedio por Materia (Admin).
  */
-function generateReportHTML(report, keys, answers, videoLinks, testId) {
-    const testInfo = TEST_INDEX[testId];
-    
-    // (v5) Función para Nivel de Desempeño
-    const getLevel = (score) => {
-        if (score >= 80) return { text: 'Avanzado', color: 'text-green-600' };
-        if (score >= 60) return { text: 'Satisfactorio', color: 'text-blue-600' };
-        if (score >= 40) return { text: 'Mínimo', color: 'text-yellow-600' };
-        return { text: 'Insuficiente', color: 'text-red-600' };
-    };
-    
-    const levels = {
-        mat: getLevel(report.mat_score),
-        lec: getLevel(report.lec_score),
-        soc: getLevel(report.soc_score),
-        cie: getLevel(report.cie_score),
-        ing: getLevel(report.ing_score), // Simplificado
-    };
-
-    // (v5) Lógica de pestañas (Simulacro vs Minisimulacro)
-    const isSimulacro = testInfo.type === 'simulacro';
-    
-    // Generar HTML de las pestañas
-    const tabsHTML = isSimulacro ? `
-        <div class="mb-6 border-b border-brand-border">
-            <nav class="-mb-px flex space-x-6" aria-label="Tabs">
-                <button class="tab-btn active" data-tab="sesion1">Sesión 1</button>
-                <button class="tab-btn" data-tab="sesion2">Sesión 2</button>
-                <button class="tab-btn" data-tab="videos">Videos de Retroalimentación</button>
-            </nav>
-        </div>
-    ` : `
-        <div class="mb-6 border-b border-brand-border">
-            <nav class="-mb-px flex space-x-6" aria-label="Tabs">
-                <button class="tab-btn active" data-tab="sesion1">Resultados Detallados</button>
-                <button class="tab-btn" data-tab="videos">Videos de Retroalimentación</button>
-            </nav>
-        </div>
-    `;
-
-    // Generar HTML del feedback de preguntas
-    const feedbackS1HTML = generateFeedbackTable(keys.s1 || keys, answers.s1 || answers);
-    const feedbackS2HTML = isSimulacro ? generateFeedbackTable(keys.s2, answers.s2) : '';
-    const videoHTML = generateVideoLinksHTML(videoLinks);
-
-    // Contenido de las Pestañas
-    const tabsContentHTML = `
-        <div id="tab-content-sesion1" class="tab-content active">
-            ${feedbackS1HTML}
-        </div>
-        ${isSimulacro ? `
-        <div id="tab-content-sesion2" class="tab-content">
-            ${feedbackS2HTML}
-        </div>
-        ` : ''}
-        <div id="tab-content-videos" class="tab-content">
-            ${videoHTML}
-        </div>
-    `;
-
-    return `
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Columna Izquierda: Puntajes y Radar -->
-            <div class="lg:col-span-1 space-y-6">
-                <!-- Puntaje Global -->
-                <div class="bg-brand-surface p-6 rounded-2xl shadow-lg text-center">
-                    <p class="text-sm font-medium text-gray-600 uppercase tracking-wider">Puntaje Global</p>
-                    <p class="text-7xl font-extrabold text-brand-secondary my-2">${report.global_score}<span class="text-4xl font-medium text-gray-400">/500</span></p>
-                </div>
-                
-                <!-- (MEJORA 2) Gráfico de Radar -->
-                <div class="bg-brand-surface p-6 rounded-2xl shadow-lg">
-                    <h3 class="text-xl font-bold text-brand-header mb-4 text-center">
-                        Perfil de Desempeño
-                    </h3>
-                    <div class="w-full max-w-sm mx-auto h-72">
-                        <canvas id="radarChart"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Columna Derecha: Puntajes por Área -->
-            <div class="lg:col-span-2 bg-brand-surface p-6 rounded-2xl shadow-lg">
-                <h3 class="text-xl font-bold text-brand-header mb-6">Puntajes por Área</h3>
-                <div class="space-y-5">
-                    <!-- Matemáticas -->
-                    <div class="score-area-card">
-                        <div class="score-area-icon" style="--color: var(--color-matematicas);"><i data-lucide="calculator"></i></div>
-                        <div>
-                            <p class="font-bold text-lg text-brand-header">Matemáticas</p>
-                            <p class="font-medium ${levels.mat.color}">${levels.mat.text}</p>
-                        </div>
-                        <div class="text-3xl font-bold ml-auto">${report.mat_score}<span class="text-xl text-gray-400">/100</span></div>
-                    </div>
-                    <!-- Lectura Crítica -->
-                    <div class="score-area-card">
-                        <div class="score-area-icon" style="--color: var(--color-lectura);"><i data-lucide="book-open"></i></div>
-                        <div>
-                            <p class="font-bold text-lg text-brand-header">Lectura Crítica</p>
-                            <p class="font-medium ${levels.lec.color}">${levels.lec.text}</p>
-                        </div>
-                        <div class="text-3xl font-bold ml-auto">${report.lec_score}<span class="text-xl text-gray-400">/100</span></div>
-                    </div>
-                    <!-- Sociales -->
-                    <div class="score-area-card">
-                        <div class="score-area-icon" style="--color: var(--color-sociales);"><i data-lucide="landmark"></i></div>
-                        <div>
-                            <p class="font-bold text-lg text-brand-header">Sociales y Ciudadanas</p>
-                            <p class="font-medium ${levels.soc.color}">${levels.soc.text}</p>
-                        </div>
-                        <div class="text-3xl font-bold ml-auto">${report.soc_score}<span class="text-xl text-gray-400">/100</span></div>
-                    </div>
-                    <!-- Ciencias -->
-                    <div class="score-area-card">
-                        <div class="score-area-icon" style="--color: var(--color-ciencias);"><i data-lucide="flask-conical"></i></div>
-                        <div>
-                            <p class="font-bold text-lg text-brand-header">Ciencias Naturales</p>
-                            <p class="font-medium ${levels.cie.color}">${levels.cie.text}</p>
-                        </div>
-                        <div class="text-3xl font-bold ml-auto">${report.cie_score}<span class="text-xl text-gray-400">/100</span></div>
-                    </div>
-                    <!-- Inglés -->
-                    <div class="score-area-card">
-                        <div class="score-area-icon" style="--color: var(--color-ingles);"><i data-lucide="globe-2"></i></div>
-                        <div>
-                            <p class="font-bold text-lg text-brand-header">Inglés</p>
-                            <p class="font-medium ${levels.ing.color}">${levels.ing.text}</p>
-                        </div>
-                        <div class="text-3xl font-bold ml-auto">${report.ing_score}<span class="text-xl text-gray-400">/100</span></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Sección de Acordeones (Detalles) -->
-        <div class="bg-brand-surface p-6 rounded-2xl shadow-lg mt-6">
-            <h3 class="text-2xl font-bold text-brand-header mb-4">Análisis Detallado</h3>
-            <!-- Pestañas (Simulacro vs Minisimulacro) -->
-            ${tabsHTML}
-            <!-- Contenido de las Pestañas -->
-            ${tabsContentHTML}
-        </div>
-    `;
-}
-
-/**
- * Genera la tabla HTML para el feedback de preguntas de una sesión.
- */
-function generateFeedbackTable(keys, answers) {
-    if (!keys || !answers) return '<p class="text-gray-600">No hay datos de feedback disponibles para esta sesión.</p>';
-
-    let tableHTML = `
-        <div class="overflow-x-auto">
-            <table class="w-full feedback-table">
-                <thead>
-                    <tr>
-                        <th>Pregunta</th>
-                        <th>Tu Respuesta</th>
-                        <th>Respuesta Correcta</th>
-                        <th>Resultado</th>
-                    </tr>
-                </thead>
-                <tbody>
-    `;
-
-    for (const questionName in keys) {
-        if (questionName.toLowerCase() === 'id' || questionName.toLowerCase() === 'email' || questionName.toLowerCase() === 'nombre') {
-            continue;
-        }
-
-        const correctAnswer = keys[questionName]?.trim() || 'N/A';
-        const userAnswer = answers[questionName]?.trim() || 'Omitida';
-        
-        const isCorrect = userAnswer === correctAnswer;
-        
-        tableHTML += `
-            <tr>
-                <td class="font-medium text-brand-header">${questionName}</td>
-                <td class="${isCorrect ? 'text-muted' : 'highlight-incorrect'}">${userAnswer}</td>
-                <td class="highlight-correct">${correctAnswer}</td>
-                <td>
-                    ${isCorrect 
-                        ? '<i data-lucide="check-circle-2" class="icon-correct"></i>' 
-                        : '<i data-lucide="x-circle" class="icon-incorrect"></i>'}
-                </td>
-            </tr>
-        `;
-    }
-
-    tableHTML += `
-                </tbody>
-            </table>
-        </div>
-    `;
-    return tableHTML;
-}
-
-/**
- * Genera el HTML para los enlaces de video.
- */
-function generateVideoLinksHTML(videoLinks) {
-    if (!videoLinks || videoLinks.length === 0) {
-        return '<p class="text-gray-600">No hay videos de retroalimentación disponibles para esta prueba.</p>';
-    }
-
-    let html = '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">';
-    
-    videoLinks.forEach(link => {
-        // (v5.1) Usar imagen de placeholder si no se define una
-        const placeholderImg = `https://placehold.co/600x400/3B82F6/FFFFFF?text=${encodeURIComponent(link.subject)}`;
-        const imgSrc = link.img || placeholderImg;
-
-        html += `
-            <a href="${link.url}" target="_blank" rel="noopener noreferrer" class="video-card-link">
-                <div class="video-card-thumbnail">
-                    <img src="${imgSrc}" alt="Miniatura de ${link.subject}" class="w-full h-full object-cover">
-                </div>
-                <div class="p-4">
-                    <h4 class="font-bold text-brand-header">${link.subject}</h4>
-                    <p class="text-sm text-gray-500">${link.range}</p>
-                </div>
-            </a>
-        `;
-    });
-    
-    html += '</div>';
-    return html;
-}
-
-/**
- * (v5.1) Añade listeners a los acordeones y pestañas
- */
-function setupAccordionListeners() {
-    // Listeners para Pestañas
-    const tabContainer = document.querySelector('.dashboard-panel.active');
-    if (!tabContainer) return;
-
-    const tabButtons = tabContainer.querySelectorAll('.tab-btn');
-    const tabContents = tabContainer.querySelectorAll('.tab-content');
-
-    tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            const tabId = button.dataset.tab;
-
-            // Ocultar todo
-            tabButtons.forEach(btn => btn.classList.remove('active'));
-            tabContents.forEach(content => content.classList.remove('active'));
-
-            // Mostrar seleccionado
-            button.classList.add('active');
-            const activeContent = tabContainer.querySelector(`#tab-content-${tabId}`);
-            if (activeContent) {
-                activeContent.classList.add('active');
-            }
-        });
-    });
-}
-
-
-// --- 6. LÓGICA DEL DASHBOARD DE ADMINISTRADOR ---
-
-/**
- * (v6) Muestra el panel principal del dashboard de admin.
- */
-function showAdminDashboard() {
-    showPanel('admin-dashboard-section', 'nav-admin-dashboard');
-    
-    // (v5) Calcular y mostrar KPIs
-    calculateAndShowAdminKPIs();
-    
-    // (v5) Renderizar gráficos (si no existen)
-    if (!window.myAdminBarChart) {
-        renderAdminBarChart();
-    }
-    if (!window.myAdminDoughnutChart) {
-        renderAdminDoughnutChart();
-    }
-}
-
-/**
- * (v6) Muestra el panel de gestión de estudiantes.
- */
-function showAdminStudentsPanel() {
-    showPanel('admin-students-section', 'nav-admin-students');
-    
-    // Poblar el selector de análisis (si existe)
-    populateStatsTestSelect();
-
-    // Resetear y renderizar la tabla
-    currentAdminPage = 1;
-    currentAdminSort = { column: 'Nombre Completo del Estudiante', direction: 'asc' };
-    document.getElementById('admin-search-input').value = '';
-    renderAdminTable();
-}
-
-/**
- * (v6) Muestra el panel de análisis estadístico.
- */
-function showAdminStatsPanel() {
-    showPanel('admin-stats-section', 'nav-admin-stats');
-    
-    // Poblar el selector de análisis
-    populateStatsTestSelect();
-    
-    // Limpiar resultados anteriores
-    document.getElementById('stats-results-container').style.display = 'none';
-    document.getElementById('stats-results-cards-grid').innerHTML = '';
-}
-
-/**
- * (v6) Muestra el panel de CRUD.
- */
-function showAdminCrudPanel() {
-    showPanel('admin-crud-section', 'nav-admin-crud');
-    
-    // Limpiar formulario y estado
-    document.getElementById('add-student-form').reset();
-    const statusEl = document.getElementById('crud-status');
-    statusEl.style.display = 'none';
-    statusEl.textContent = '';
-}
-
-/**
- * (v5) Calcula y muestra las tarjetas de KPI del admin.
- */
-function calculateAndShowAdminKPIs() {
-    // KPI 1: Total Estudiantes
-    const totalStudents = ALL_STUDENTS_ARRAY.length;
-    document.getElementById('admin-kpi-students').textContent = totalStudents;
-    
-    // KPI 2: Total Pruebas
-    const totalTests = Object.keys(TEST_INDEX).length;
-    document.getElementById('admin-kpi-tests').textContent = totalTests;
-    
-    // KPIs 3 y 4: Promedios
-    let simCount = 0, simTotal = 0;
-    let miniCount = 0, miniTotal = 0;
-
-    SCORES_DB.forEach(score => {
-        const testType = TEST_INDEX[score.test_id]?.type;
-        const globalScore = parseInt(score.global_score, 10);
-        if (testType === 'simulacro') {
-            simTotal += globalScore;
-            simCount++;
-        } else if (testType === 'minisimulacro') {
-            miniTotal += globalScore;
-            miniCount++;
-        }
-    });
-
-    const avgSim = simCount > 0 ? (simTotal / simCount).toFixed(0) : 'N/A';
-    const avgMini = miniCount > 0 ? (miniTotal / miniCount).toFixed(0) : 'N/A';
-
-    document.getElementById('admin-kpi-avg-sim').textContent = avgSim;
-    document.getElementById('admin-kpi-avg-mini').textContent = avgMini;
-}
-
-/**
- * (v5) Renderiza el gráfico de barras (promedio por materia) del admin.
- */
-function renderAdminBarChart() {
-    const ctx = document.getElementById('adminBarChart')?.getContext('2d');
+function renderAdminAvgSubjectsChart() {
+    const ctx = elements.adminAvgSubjectsChart?.getContext('2d');
     if (!ctx) return;
 
-    // Calcular promedios
-    let totals = { mat: 0, lec: 0, soc: 0, cie: 0, ing: 0 };
-    const count = SCORES_DB.length;
-    
-    if (count === 0) return;
-
-    SCORES_DB.forEach(score => {
-        totals.mat += parseInt(score.mat_score, 10);
-        totals.lec += parseInt(score.lec_score, 10);
-        totals.soc += parseInt(score.soc_score, 10);
-        totals.cie += parseInt(score.cie_score, 10);
-        totals.ing += parseInt(score.ing_score, 10);
+    const avgScores = { mat: [], lec: [], soc: [], cie: [], ing: [] };
+    SCORES_DB.forEach(s => {
+        avgScores.mat.push(s.mat_score);
+        avgScores.lec.push(s.lec_score);
+        avgScores.soc.push(s.soc_score);
+        avgScores.cie.push(s.cie_score);
+        avgScores.ing.push(s.ing_score);
     });
 
-    const avgs = [
-        (totals.mat / count).toFixed(0),
-        (totals.lec / count).toFixed(0),
-        (totals.soc / count).toFixed(0),
-        (totals.cie / count).toFixed(0),
-        (totals.ing / count).toFixed(0)
+    const data = [
+        (avgScores.mat.reduce((a, b) => a + b, 0) / avgScores.mat.length) || 0,
+        (avgScores.lec.reduce((a, b) => a + b, 0) / avgScores.lec.length) || 0,
+        (avgScores.soc.reduce((a, b) => a + b, 0) / avgScores.soc.length) || 0,
+        (avgScores.cie.reduce((a, b) => a + b, 0) / avgScores.cie.length) || 0,
+        (avgScores.ing.reduce((a, b) => a + b, 0) / avgScores.ing.length) || 0,
     ];
 
-    window.myAdminBarChart = new Chart(ctx, {
+    if (window.myAdminAvgSubjectsChart instanceof Chart) {
+        window.myAdminAvgSubjectsChart.destroy();
+    }
+
+    window.myAdminAvgSubjectsChart = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: ['Mat', 'Lec', 'Soc', 'Cie', 'Ing'],
+            labels: ['Matemáticas', 'Lectura Crítica', 'Sociales', 'Ciencias', 'Inglés'],
             datasets: [{
-                label: 'Promedio General (0-100)',
-                data: avgs,
+                label: 'Promedio (0-100)',
+                data: data,
                 backgroundColor: [
                     'var(--color-matematicas)',
                     'var(--color-lectura)',
                     'var(--color-sociales)',
                     'var(--color-ciencias)',
-                    'var(--color-ingles)'
+                    'var(--color-ingles)',
                 ],
                 borderRadius: 4
             }]
@@ -1246,14 +1241,7 @@ function renderAdminBarChart() {
             responsive: true,
             maintainAspectRatio: false,
             scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 100,
-                    grid: { color: '#e5e7eb' }
-                },
-                x: {
-                    grid: { display: false }
-                }
+                y: { beginAtZero: true, max: 100 }
             },
             plugins: {
                 legend: { display: false }
@@ -1263,370 +1251,170 @@ function renderAdminBarChart() {
 }
 
 /**
- * (v5) Renderiza el gráfico de dona (distribución de puntajes) del admin.
+ * Renderiza el gráfico de distribución de puntajes (Admin).
  */
-function renderAdminDoughnutChart() {
-    const ctx = document.getElementById('adminDoughnutChart')?.getContext('2d');
+function renderAdminGlobalScoreDistChart() {
+    const ctx = elements.adminGlobalScoreDistChart?.getContext('2d');
     if (!ctx) return;
 
-    let ranges = {
-        '0-200': 0,
-        '201-250': 0,
-        '251-300': 0,
-        '301-350': 0,
-        '351-400': 0,
-        '401-500': 0
-    };
+    const scores = SCORES_DB.map(s => s.global_score);
+    const bins = [0, 200, 250, 300, 350, 400, 450, 500];
+    const distribution = Array(bins.length - 1).fill(0);
 
-    SCORES_DB.forEach(score => {
-        const s = parseInt(score.global_score, 10);
-        if (s <= 200) ranges['0-200']++;
-        else if (s <= 250) ranges['201-250']++;
-        else if (s <= 300) ranges['251-300']++;
-        else if (s <= 350) ranges['301-350']++;
-        else if (s <= 400) ranges['351-400']++;
-        else ranges['401-500']++;
+    scores.forEach(score => {
+        for (let i = 0; i < bins.length - 1; i++) {
+            if (score >= bins[i] && score < bins[i+1]) {
+                distribution[i]++;
+                break;
+            }
+        }
+        if (score === 500) distribution[distribution.length - 1]++; // Incluir 500
     });
 
-    window.myAdminDoughnutChart = new Chart(ctx, {
-        type: 'doughnut',
+    const labels = bins.slice(0, -1).map((bin, i) => `${bin}-${bins[i+1]}`);
+    labels[labels.length - 1] = "450-500";
+
+    if (window.myAdminGlobalScoreDistChart instanceof Chart) {
+        window.myAdminGlobalScoreDistChart.destroy();
+    }
+
+    window.myAdminGlobalScoreDistChart = new Chart(ctx, {
+        type: 'bar',
         data: {
-            labels: Object.keys(ranges),
+            labels: labels,
             datasets: [{
-                label: '# de Estudiantes',
-                data: Object.values(ranges),
-                backgroundColor: [
-                    '#ef4444', // red-500
-                    '#f97316', // orange-500
-                    '#eab308', // yellow-500
-                    '#84cc16', // lime-500
-                    '#22c55e', // green-500
-                    '#14b8a6', // teal-500
-                ],
-                borderColor: 'var(--brand-surface)',
-                borderWidth: 4
+                label: 'Nº de Estudiantes',
+                data: distribution,
+                backgroundColor: 'rgba(249, 115, 22, 0.7)', // brand-primary
+                borderColor: 'var(--brand-primary)',
+                borderWidth: 1,
+                borderRadius: 4
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            scales: {
+                y: { title: { display: true, text: 'Nº Estudiantes' } },
+                x: { title: { display: true, text: 'Rango de Puntaje' } }
+            },
             plugins: {
-                legend: {
-                    position: 'right',
-                }
+                legend: { display: false }
             }
         }
     });
 }
 
-/**
- * Renderiza la tabla de estudiantes del admin, aplicando filtros, orden y paginación.
- */
-function renderAdminTable() {
-    const tableBody = document.getElementById('admin-table-body');
-    const paginationControls = document.getElementById('admin-pagination-controls');
-    if (!tableBody || !paginationControls) return;
 
-    // 1. Filtrar
-    const searchTerm = document.getElementById('admin-search-input').value.toLowerCase();
-    const filteredStudents = ALL_STUDENTS_ARRAY.filter(student => 
-        student['Nombre Completo del Estudiante'].toLowerCase().includes(searchTerm) ||
-        student['Número de Documento'].toLowerCase().includes(searchTerm)
-    );
-
-    // 2. Ordenar
-    const sortKey = currentAdminSort.column;
-    const sortDir = currentAdminSort.direction;
-    filteredStudents.sort((a, b) => {
-        let valA = a[sortKey] || '';
-        let valB = b[sortKey] || '';
-        
-        // (v5.1) Asegurar que la comparación sea numérica si es documento
-        if (sortKey === 'Número de Documento') {
-            valA = parseInt(valA, 10) || 0;
-            valB = parseInt(valB, 10) || 0;
-            return sortDir === 'asc' ? valA - valB : valB - valA;
-        } else {
-            valA = valA.toString().toLowerCase();
-            valB = valB.toString().toLowerCase();
-            return sortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-        }
-    });
-    
-    // (v5.1) Actualizar iconos de ordenamiento en cabecera
-    document.querySelectorAll('#admin-students-section .table-header').forEach(th => {
-        th.classList.remove('sorted');
-        th.querySelector('.sort-icon')?.remove();
-        if (th.dataset.sort === sortKey) {
-            th.classList.add('sorted');
-            const icon = sortDir === 'asc' ? 'chevron-up' : 'chevron-down';
-            th.innerHTML += ` <i data-lucide="${icon}" class="sort-icon h-4 w-4"></i>`;
-        }
-    });
-
-    // 3. Paginar
-    const totalPages = Math.ceil(filteredStudents.length / ADMIN_ROWS_PER_PAGE);
-    const startIndex = (currentAdminPage - 1) * ADMIN_ROWS_PER_PAGE;
-    const endIndex = startIndex + ADMIN_ROWS_PER_PAGE;
-    const paginatedStudents = filteredStudents.slice(startIndex, endIndex);
-
-    // 4. Renderizar Tabla
-    tableBody.innerHTML = '';
-    if (paginatedStudents.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-gray-500 py-10">No se encontraron estudiantes.</td></tr>`;
-    } else {
-        paginatedStudents.forEach(student => {
-            const docNumber = student['Número de Documento'];
-            tableBody.innerHTML += `
-                <tr class="hover:bg-gray-50">
-                    <td class="table-cell font-medium text-brand-header">${student['Nombre Completo del Estudiante']}</td>
-                    <td class="table-cell text-gray-600">${docNumber}</td>
-                    <td class="table-cell text-gray-600">${student['Email']}</td>
-                    <td class="table-cell text-gray-600">${student['Colegio/institución']}</td>
-                    <td class="table-cell text-center">
-                        <button class="btn-icon view-student-history-btn" data-student-id="${docNumber}" title="Ver Historial de Informes">
-                            <i data-lucide="eye"></i>
-                        </button>
-                    </td>
-                </tr>
-            `;
-        });
-    }
-
-    // 5. Renderizar Paginación
-    renderAdminPagination(totalPages);
-    
-    // (v5.1) Actualizar iconos de Lucide
-    lucide.createIcons();
-}
+// --- 8. LÓGICA DE ANÁLISIS DE ÍTEMS (MEJORA 1) ---
 
 /**
- * Renderiza los controles de paginación para la tabla de admin.
+ * Maneja el clic en el botón "Analizar" del panel de admin.
  */
-function renderAdminPagination(totalPages) {
-    const controls = document.getElementById('admin-pagination-controls');
-    controls.innerHTML = '';
-    if (totalPages <= 1) return;
-
-    // Botón "Anterior"
-    controls.innerHTML += `
-        <button class="pagination-btn" data-page="${currentAdminPage - 1}" ${currentAdminPage === 1 ? 'disabled' : ''}>
-            <i data-lucide="chevron-left" class="h-5 w-5"></i>
-        </button>
-    `;
-
-    // (v5.1) Lógica de "..." para paginación
-    const pagesToShow = [];
-    if (totalPages <= 7) {
-        for (let i = 1; i <= totalPages; i++) pagesToShow.push(i);
-    } else {
-        pagesToShow.push(1);
-        if (currentAdminPage > 3) pagesToShow.push('...');
-        
-        let start = Math.max(2, currentAdminPage - 1);
-        let end = Math.min(totalPages - 1, currentAdminPage + 1);
-
-        if (currentAdminPage <= 3) end = 3;
-        if (currentAdminPage >= totalPages - 2) start = totalPages - 2;
-
-        for (let i = start; i <= end; i++) pagesToShow.push(i);
-        
-        if (currentAdminPage < totalPages - 2) pagesToShow.push('...');
-        pagesToShow.push(totalPages);
-    }
-
-    // Botones de Página
-    pagesToShow.forEach(page => {
-        if (page === '...') {
-            controls.innerHTML += `<span class="pagination-btn" disabled>...</span>`;
-        } else {
-            controls.innerHTML += `
-                <button class="pagination-btn ${page === currentAdminPage ? 'active' : ''}" data-page="${page}">
-                    ${page}
-                </button>
-            `;
-        }
-    });
-
-    // Botón "Siguiente"
-    controls.innerHTML += `
-        <button class="pagination-btn" data-page="${currentAdminPage + 1}" ${currentAdminPage === totalPages ? 'disabled' : ''}>
-            <i data-lucide="chevron-right" class="h-5 w-5"></i>
-        </button>
-    `;
-    
-    lucide.createIcons();
-}
-
-/**
- * Muestra el historial de informes de un estudiante en un modal (para Admin).
- */
-function showAdminStudentHistory(studentDocNumber) {
-    const student = STUDENT_DB[studentDocNumber];
-    if (!student) return;
-
-    const modalBackdrop = document.getElementById('admin-modal-backdrop');
-    const modalHeader = document.getElementById('admin-modal-header');
-    const modalBody = document.getElementById('admin-modal-body');
-
-    modalHeader.textContent = `Historial de: ${student['Nombre Completo del Estudiante']}`;
-    modalBody.innerHTML = ''; // Limpiar
-
-    const studentReports = SCORES_DB.filter(score => score.doc_number === studentDocNumber)
-                                 .sort((a, b) => new Date(b.test_date) - new Date(a.test_date));
-
-    if (studentReports.length === 0) {
-        modalBody.innerHTML = '<p class="text-gray-600 text-center py-5">Este estudiante no tiene informes registrados.</p>';
-    } else {
-        let gridHTML = '<div class="grid grid-cols-1 md:grid-cols-2 gap-5">';
-        studentReports.forEach(report => {
-            const testInfo = TEST_INDEX[report.test_id];
-            if (!testInfo) return;
-            
-            // (v5.1) Usar 'report-card' pero con data-doc-number
-            gridHTML += `
-                <div class="report-card cursor-pointer" data-testid="${report.test_id}" data-doc-number="${studentDocNumber}">
-                    <h3 class="text-lg font-bold text-brand-header">${testInfo.name}</h3>
-                    <p class="text-sm text-gray-500 mb-3">Realizado el: ${new Date(report.test_date).toLocaleDateString('es-CO')}</p>
-                    <p class_alias="text-sm font-medium text-gray-600">Puntaje Global</p>
-                    <p class="text-3xl font-bold text-brand-secondary">${report.global_score}</p>
-                    <span class_alias="text-xs text-gray-500">Haz clic para ver el informe detallado</span>
-                </div>
-            `;
-        });
-        gridHTML += '</div>';
-        modalBody.innerHTML = gridHTML;
-    }
-
-    openModal(modalBackdrop);
-}
-
-
-// --- 7. LÓGICA DE ANÁLISIS ESTADÍSTICO (MEJORA 1) ---
-
-/**
- * (v5.1) Pobla el selector de pruebas en el panel de análisis.
- */
-function populateStatsTestSelect() {
-    const statsTestSelect = document.getElementById('stats-test-select');
-    if (statsTestSelect && statsTestSelect.options.length <= 1) {
-        statsTestSelect.innerHTML = '<option value="">Seleccione una prueba...</option>';
-        for (const testId in TEST_INDEX) {
-            const testName = TEST_INDEX[testId].name;
-            statsTestSelect.innerHTML += `<option value="${testId}">${testName}</option>`;
-        }
-    }
-}
-
-/**
- * (v5.1) Manejador para el botón "Analizar".
- */
-async function handleAnalyzeTest() {
-    const statsTestSelectEl = document.getElementById('stats-test-select');
-    const statsLoadingEl = document.getElementById('stats-loading');
-    const statsResultsContainerEl = document.getElementById('stats-results-container');
-    const statsResultsTitleEl = document.getElementById('stats-results-title');
-    const statsResultsCardsGridEl = document.getElementById('stats-results-cards-grid');
-
-    const testId = statsTestSelectEl.value;
+async function handleAnalyzeItems() {
+    const testId = elements.statsTestSelect.value;
     if (!testId) {
-        alert('Por favor, seleccione una prueba para analizar.');
+        alert("Por favor, seleccione una prueba.");
         return;
     }
 
-    // Mostrar spinner y ocultar resultados anteriores
-    statsLoadingEl.style.display = 'block';
-    statsResultsContainerEl.style.display = 'none';
-    statsResultsCardsGridEl.innerHTML = '';
-    statsResultsTitleEl.textContent = `Resultados de Análisis: ${TEST_INDEX[testId].name}`;
+    elements.statsLoading.classList.remove('hidden');
+    elements.statsResultsContainer.classList.add('hidden');
+    elements.statsResultsCardsContainer.innerHTML = "";
+    elements.statsSubjectFilter.innerHTML = '<option value="all">Todas las Materias</option>';
+    elements.statsSubjectFilter.disabled = true;
 
     try {
-        // 1. Analizar la prueba
-        const analysisResults = await analyzeTestItems(testId);
-
-        // 2. Renderizar los resultados
-        renderStatsCards(analysisResults);
+        const testData = await getTestAnswersAndKey(testId);
+        const analysis = await analyzeTestItems(testId, testData);
+        
+        renderStatsCards(analysis); // Renderizar todas las tarjetas
+        
+        // Poblar filtro de materias
+        const subjects = [...new Set(Object.values(analysis).map(item => item.materia))];
+        subjects.sort().forEach(subject => {
+            elements.statsSubjectFilter.innerHTML += `<option value="${subject}">${subject}</option>`;
+        });
+        
+        elements.statsSubjectFilter.disabled = false;
+        elements.statsSubjectFilter.onchange = () => {
+            renderStatsCards(analysis, elements.statsSubjectFilter.value);
+        };
+        
+        elements.statsResultsTitle.textContent = `Análisis de ${Object.keys(analysis).length} ítems para: ${TEST_INDEX[testId].name}`;
+        elements.statsResultsContainer.classList.remove('hidden');
 
     } catch (error) {
-        console.error(`Error analizando la prueba ${testId}:`, error);
-        alert(`Error al analizar la prueba. Revise la consola.`);
+        console.error("Error en el análisis de ítems:", error);
+        alert(`Error al analizar: ${error.message}`);
     } finally {
-        // Ocultar spinner y mostrar tarjetas
-        statsLoadingEl.style.display = 'none';
-        statsResultsContainerEl.style.display = 'block';
-        lucide.createIcons(); // (v5) Actualizar iconos
+        elements.statsLoading.classList.add('hidden');
     }
 }
 
 /**
- * (v5.1) Realiza el análisis estadístico de una prueba.
- * @param {string} testId
- * @returns {Object}
+ * Lógica principal de análisis estadístico de ítems.
+ * @param {string} testId - El ID de la prueba.
+ * @param {object} testData - Los datos cargados (claves, respuestas) de getTestAnswersAndKey.
+ * @returns {Promise<object>} - Objeto con los resultados del análisis.
  */
-async function analyzeTestItems(testId) {
+async function analyzeTestItems(testId, testData) {
     const testInfo = TEST_INDEX[testId];
-    if (!testInfo) throw new Error(`No se encontró información para la prueba ${testId}`);
+    const isSimulacro = testInfo.type === 'simulacro';
 
     const stats = {};
-    const keysMap = {}; 
-    const isSimulacro = testInfo.type === 'simulacro';
-    
-    const keysFiles = isSimulacro ? [testInfo.keys_s1, testInfo.keys_s2] : [testInfo.keys];
-    const answersFiles = isSimulacro ? [testInfo.answers_s1, testInfo.answers_s2] : [testInfo.answers];
+    const keysMap = {};
+    const answersData = [];
 
-    // --- 1. Cargar y mapear claves ---
-    for (const keysPath of keysFiles) {
-        if (!keysPath) continue;
-        const keysData = await fetchAndParseCSV(`${BASE_DATA_URL}${keysPath}`);
-        
-        const keysHeaders = Object.keys(keysData[0]);
-        const keysValues = keysData[0];
-        
-        for(const header of keysHeaders) {
-            if (header.toLowerCase() === 'id' || header.toLowerCase() === 'email' || header.toLowerCase() === 'nombre') continue;
-            
-            const cleanHeader = header.trim();
-            const cleanKey = keysValues[header]?.trim() || 'N/A';
-            
-            keysMap[cleanHeader] = cleanKey;
-            stats[cleanHeader] = {
-                pregunta: cleanHeader,
-                correcta: cleanKey,
-                A: 0, B: 0, C: 0, D: 0, Omision: 0,
-                total: 0,
-                correctas: 0
-            };
-        }
+    // 1. Unificar Claves y Respuestas (manejar S1/S2 o sesión única)
+    if (isSimulacro) {
+        Object.assign(keysMap, testData.key_s1, testData.key_s2);
+        // Mapear respuestas de estudiantes por ID
+        const answersMap = {};
+        testData.answers_s1.forEach(r => answersMap[r.ID] = { ...r });
+        testData.answers_s2.forEach(r => answersMap[r.ID] = { ...(answersMap[r.ID] || {}), ...r });
+        answersData.push(...Object.values(answersMap));
+    } else {
+        Object.assign(keysMap, testData.key);
+        answersData.push(...testData.answers);
     }
 
-    // --- 2. Procesar Respuestas de TODOS los estudiantes ---
-    for (const answersPath of answersFiles) {
-        if (!answersPath) continue;
-        const answersData = await fetchAndParseCSV(`${BASE_DATA_URL}${answersPath}`);
+    // 2. Inicializar objeto de estadísticas
+    for (const header in keysMap) {
+        if (!header || !keysMap[header]) continue; // Omitir cabeceras vacías
+        
+        // Extraer materia del header (ej. "Matemáticas S1 [1.]")
+        const materia = header.split(' ')[0];
+        
+        stats[header] = {
+            pregunta: header,
+            materia: materia,
+            correcta: keysMap[header].trim().toUpperCase(),
+            A: 0, B: 0, C: 0, D: 0, Omision: 0,
+            total: 0,
+            correctas: 0
+        };
+    }
 
-        for (const studentRow of answersData) {
-            for (const questionHeader in keysMap) {
-                if (studentRow.hasOwnProperty(questionHeader)) {
-                    
-                    const studentAnswer = (studentRow[questionHeader] || 'OMISION').trim().toUpperCase();
-                    const correctAnswer = keysMap[questionHeader];
-                    const statsEntry = stats[questionHeader];
-                    
-                    if (!statsEntry) continue; // Seguridad
+    // 3. Procesar Respuestas de TODOS los estudiantes
+    for (const studentRow of answersData) {
+        for (const questionHeader in stats) {
+            if (studentRow.hasOwnProperty(questionHeader)) {
+                const studentAnswer = studentRow[questionHeader]?.trim().toUpperCase() || 'OMISION';
+                const statsEntry = stats[questionHeader];
 
-                    statsEntry.total++;
+                statsEntry.total++;
 
-                    // Conteo de distractores
-                    if (studentAnswer === 'A') statsEntry.A++;
-                    else if (studentAnswer === 'B') statsEntry.B++;
-                    else if (studentAnswer === 'C') statsEntry.C++;
-                    else if (studentAnswer === 'D') statsEntry.D++;
-                    else statsEntry.Omision++;
-                    
-                    // Conteo de aciertos
-                    if (studentAnswer === correctAnswer) {
-                        statsEntry.correctas++;
-                    }
+                // Conteo de distractores
+                if (studentAnswer === 'A') statsEntry.A++;
+                else if (studentAnswer === 'B') statsEntry.B++;
+                else if (studentAnswer === 'C') statsEntry.C++;
+                else if (studentAnswer === 'D') statsEntry.D++;
+                else statsEntry.Omision++;
+                
+                // Conteo de aciertos
+                if (studentAnswer === statsEntry.correcta) {
+                    statsEntry.correctas++;
                 }
             }
         }
@@ -1636,270 +1424,283 @@ async function analyzeTestItems(testId) {
 }
 
 /**
- * (v5.1) Renderiza los resultados del análisis en TARJETAS (diseño mejorado).
- * @param {Object} stats
+ * Renderiza las tarjetas de estadísticas de ítems.
+ * @param {object} stats - Resultados del análisis.
+ * @param {string} [subjectFilter='all'] - Filtro de materia opcional.
  */
-function renderStatsCards(stats) {
-    const gridEl = document.getElementById('stats-results-cards-grid');
-    gridEl.innerHTML = '';
+function renderStatsCards(stats, subjectFilter = 'all') {
+    elements.statsResultsCardsContainer.innerHTML = ""; // Limpiar
     
-    // (v5.1) Ordenar por nombre de pregunta
-    const sortedQuestions = Object.keys(stats).sort((a, b) => {
-        // Extraer números para ordenar correctamente (ej. "Mat [1.]" vs "Mat [10.]")
-        const numA = parseInt(a.match(/\[(\d+)\.*\]/)?.[1] || 0, 10);
-        const numB = parseInt(b.match(/\[(\d+)\.*\]/)?.[1] || 0, 10);
-        return numA - numB;
-    });
+    let itemsToShow = Object.values(stats);
 
-    for (const pregunta of sortedQuestions) {
-        const item = stats[pregunta];
-        if (item.total === 0) continue;
-
-        // Calcular porcentajes
-        const pctAcierto = ((item.correctas / item.total) * 100).toFixed(0);
-        const pctOmision = ((item.Omision / item.total) * 100).toFixed(0);
-        const pctA = ((item.A / item.total) * 100).toFixed(0);
-        const pctB = ((item.B / item.total) * 100).toFixed(0);
-        const pctC = ((item.C / item.total) * 100).toFixed(0);
-        const pctD = ((item.D / item.total) * 100).toFixed(0);
-
-        // Dificultad
-        let dificultadClase = 'text-yellow-600';
-        let dificultadTexto = 'Medio';
-        if (pctAcierto >= 75) {
-            dificultadClase = 'text-brand-green';
-            dificultadTexto = 'Fácil';
-        } else if (pctAcierto <= 35) {
-            dificultadClase = 'text-brand-red';
-            dificultadTexto = 'Difícil';
-        }
-        
-        // Clases de resaltado
-        const classA = item.correcta === 'A' ? 'correct' : '';
-        const classB = item.correcta === 'B' ? 'correct' : '';
-        const classC = item.correcta === 'C' ? 'correct' : '';
-        const classD = item.correcta === 'D' ? 'correct' : '';
-
-        const cardHTML = `
-            <div class="stats-card">
-                <div class="flex justify-between items-center mb-3">
-                    <h4 class="text-lg font-bold text-brand-header">${item.pregunta}</h4>
-                    <span class="text-sm font-bold text-brand-green">Correcta: ${item.correcta}</span>
-                </div>
-                <div class="space-y-4">
-                    <div class="flex justify-between items-baseline">
-                        <span class="text-sm font-medium text-gray-600">Acierto:</span>
-                        <span class="text-2xl font-bold ${dificultadClase}">${pctAcierto}%</span>
-                        <span class="text-sm font-medium text-gray-500">(${dificultadTexto})</span>
-                    </div>
-                     <div class="flex justify-between items-baseline">
-                        <span class="text-sm font-medium text-gray-600">Omisión:</span>
-                        <span class="text-2xl font-bold text-gray-700">${pctOmision}%</span>
-                    </div>
-                    
-                    <hr class="my-3">
-                    <h5 class="text-sm font-semibold text-gray-800">Distribución de Distractores:</h5>
-                    
-                    <div class="space-y-2">
-                        <div class="distractor-bar ${classA}">
-                            <span class="label">A: ${pctA}%</span>
-                            <div class="bar" style="width: ${pctA}%;"></div>
-                        </div>
-                        <div class="distractor-bar ${classB}">
-                            <span class="label">B: ${pctB}%</span>
-                            <div class="bar" style="width: ${pctB}%;"></div>
-                        </div>
-                        <div class="distractor-bar ${classC}">
-                            <span class="label">C: ${pctC}%</span>
-                            <div class="bar" style="width: ${pctC}%;"></div>
-                        </div>
-                        <div class="distractor-bar ${classD}">
-                            <span class="label">D: ${pctD}%</span>
-                            <div class="bar" style="width: ${pctD}%;"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        gridEl.innerHTML += cardHTML;
+    // Aplicar filtro
+    if (subjectFilter !== 'all') {
+        itemsToShow = itemsToShow.filter(item => item.materia === subjectFilter);
     }
-}
 
+    // Ordenar (ej. por dificultad)
+    itemsToShow.sort((a, b) => (a.correctas / a.total) - (b.correctas / b.total));
 
-// --- 8. LÓGICA DEL CRUD (MEJORA 3) ---
-
-/**
- * (v5.1) Maneja el envío del formulario de "Añadir Estudiante".
- * Guarda en caché local y abre el modal del token.
- */
-async function handleAddStudentSubmit(e) {
-    e.preventDefault();
-    const statusEl = document.getElementById('crud-status');
-    const buttonEl = document.getElementById('add-student-btn');
-    
-    buttonEl.disabled = true;
-    statusEl.textContent = 'Validando...';
-    statusEl.style.display = 'inline';
-    statusEl.style.color = 'var(--brand-text)';
-
-    try {
-        // 1. Obtener datos del formulario
-        const newStudent = {
-            'Nombre Completo del Estudiante': document.getElementById('student-name').value.trim(),
-            'Email': document.getElementById('student-email').value.trim(),
-            'Tipo de Documento': document.getElementById('student-doc-type').value,
-            'Número de Documento': document.getElementById('student-doc-number').value.trim(),
-            'Fecha de Nacimiento': document.getElementById('student-birthdate').value.trim(),
-            'Departamento': document.getElementById('student-department').value.trim(),
-            'Colegio/institución': document.getElementById('student-school').value.trim(),
-        };
-
-        // 2. Validar
-        if (!newStudent['Nombre Completo del Estudiante'] || !newStudent['Número de Documento'] || !newStudent['Fecha de Nacimiento']) {
-            throw new Error('Nombre, Documento y Fecha de Nacimiento son obligatorios.');
-        }
-
-        // 3. Cargar el CSV de estudiantes actual (si no está en caché)
-        if (!crudCache.studentDb) {
-            statusEl.textContent = 'Cargando base de datos actual...';
-            const fileData = await getGitHubFile(GITHUB_API_CONFIG.studentDbPath);
-            crudCache.studentDb = atob(fileData.content); // Decodificar Base64
-            crudCache.studentDbSha = fileData.sha;
-        }
-
-        // 4. Convertir la nueva fila a CSV
-        // (v5.1) Usar PapaParse para generar la fila, asegurando comillas
-        const newCsvRow = Papa.unparse([newStudent], {
-            header: false, // No añadir cabecera
-            quotes: true  // Poner comillas a todo
-        });
-
-        // 5. Guardar en caché local
-        // (v5.1) Asegurarse de que haya un salto de línea
-        let newContent = crudCache.studentDb;
-        if (!newContent.endsWith('\n')) {
-            newContent += '\n';
-        }
-        newContent += newCsvRow;
-        
-        localStorage.setItem('crud_pending_studentDb', newContent);
-        
-        // 6. Abrir modal para pedir token
-        statusEl.textContent = 'Datos validados.';
-        openModal(document.getElementById('github-token-modal'));
-
-    } catch (error) {
-        console.error('Error al preparar estudiante:', error);
-        statusEl.textContent = `Error: ${error.message}`;
-        statusEl.style.color = 'var(--brand-red)';
-    } finally {
-        buttonEl.disabled = false;
-    }
-}
-
-/**
- * (v5.1) Maneja la confirmación del token y el guardado en GitHub.
- */
-async function handleConfirmGithubToken() {
-    const tokenInput = document.getElementById('github-token-input');
-    const token = tokenInput.value.trim();
-    const errorEl = document.getElementById('github-token-error');
-    const confirmBtn = document.getElementById('confirm-token-btn');
-
-    if (!token) {
-        errorEl.textContent = 'El token no puede estar vacío.';
-        errorEl.style.display = 'block';
+    if (itemsToShow.length === 0) {
+        elements.statsResultsCardsContainer.innerHTML = `<p class="text-brand-text/80 text-center py-4">No hay datos para esta selección.</p>`;
         return;
     }
 
-    // Deshabilitar botón
-    confirmBtn.disabled = true;
-    confirmBtn.textContent = 'Guardando...';
-    errorEl.style.display = 'none';
+    itemsToShow.forEach(item => {
+        if (item.total === 0) return;
 
-    try {
-        // 1. Obtener el contenido pendiente de localStorage
-        const newContent = localStorage.getItem('crud_pending_studentDb');
-        if (!newContent) {
-            throw new Error('No hay cambios pendientes para guardar.');
+        // Calcular porcentajes
+        const pctAcierto = (item.correctas / item.total) * 100;
+        const pctOmision = (item.Omision / item.total) * 100;
+        const pctA = (item.A / item.total) * 100;
+        const pctB = (item.B / item.total) * 100;
+        const pctC = (item.C / item.total) * 100;
+        const pctD = (item.D / item.total) * 100;
+
+        // Determinar dificultad
+        let dificultadClase, dificultadTexto;
+        if (pctAcierto >= 75) {
+            dificultadClase = 'stats-pill-green'; dificultadTexto = 'Fácil';
+        } else if (pctAcierto <= 35) {
+            dificultadClase = 'stats-pill-red'; dificultadTexto = 'Difícil';
+        } else {
+            dificultadClase = 'stats-pill-yellow'; dificultadTexto = 'Media';
         }
 
-        // 2. Codificar a Base64
-        const newContentBase64 = btoa(unescape(encodeURIComponent(newContent))); // (v5.1) Seguro para UTF-8
+        // Resaltar respuesta correcta
+        const correctClass = 'font-bold text-brand-green';
+        const distA = item.correcta === 'A' ? correctClass : '';
+        const distB = item.correcta === 'B' ? correctClass : '';
+        const distC = item.correcta === 'C' ? correctClass : '';
+        const distD = item.correcta === 'D' ? correctClass : '';
 
-        // 3. Obtener el SHA (del caché)
-        const sha = crudCache.studentDbSha;
-        if (!sha) {
-            throw new Error('No se encontró el SHA del archivo. Intente recargar la página.');
-        }
+        const cardHtml = `
+            <div class="stats-card">
+                <div class="stats-card-header">
+                    <h4 class="stats-card-title">${item.pregunta}</h4>
+                    <div class="stats-card-pills">
+                        <span class="${dificultadClase} stats-pill">${dificultadTexto} (${pctAcierto.toFixed(0)}%)</span>
+                        <span class="stats-pill-gray stats-pill">Omisión: ${pctOmision.toFixed(0)}%</span>
+                    </div>
+                </div>
+                <div class="pt-4 space-y-2">
+                    ${generateDistractorBar('A', pctA, distA)}
+                    ${generateDistractorBar('B', pctB, distB)}
+                    ${generateDistractorBar('C', pctC, distC)}
+                    ${generateDistractorBar('D', pctD, distD)}
+                </div>
+            </div>
+        `;
+        elements.statsResultsCardsContainer.innerHTML += cardHtml;
+    });
+}
 
-        // 4. Escribir (Hacer Commit) del nuevo archivo
-        const commitMessage = `Commit automático: Añadidos nuevos estudiantes desde la plataforma.`;
-        const { owner, repo, branch, studentDbPath } = GITHUB_API_CONFIG;
-        
-        await updateGitHubFile(studentDbPath, token, commitMessage, newContentBase64, sha, owner, repo, branch);
+/**
+ * Helper para generar una barra de distractor visual.
+ */
+function generateDistractorBar(option, percentage, extraClass = '') {
+    const color = extraClass ? 'bg-brand-green' : 'bg-brand-secondary';
+    return `
+        <div class="flex items-center gap-3">
+            <span class="w-10 text-sm font-medium text-right ${extraClass}">${option}:</span>
+            <div class="distractor-bar-container flex-1">
+                <div class="distractor-bar ${color}" style="width: ${percentage.toFixed(0)}%"></div>
+            </div>
+            <span class="w-12 text-sm font-semibold text-left ${extraClass}">${percentage.toFixed(0)}%</span>
+        </div>
+    `;
+}
 
-        // 5. Éxito
-        closeModal(document.getElementById('github-token-modal'));
-        tokenInput.value = '';
-        localStorage.removeItem('crud_pending_studentDb');
-        
-        // Actualizar caché local para el próximo guardado
-        crudCache.studentDb = newContent;
-        // (v5.1) Es necesario recargar el SHA para el *próximo* commit
-        const newFileData = await getGitHubFile(studentDbPath, token);
-        crudCache.studentDbSha = newFileData.sha;
-        
-        // Actualizar UI
-        const statusEl = document.getElementById('crud-status');
-        statusEl.textContent = '¡Estudiante(s) guardado(s) con éxito!';
-        statusEl.style.color = 'var(--brand-green)';
-        document.getElementById('add-student-form').reset();
-        
-        // (v5.1) Recargar la base de datos de estudiantes en la app
-        processStudentData(Papa.parse(newContent, { header: true, skipEmptyLines: true }).data);
-        renderAdminTable(); // Refrescar la tabla
 
-    } catch (error) {
-        console.error('Error al guardar en GitHub:', error);
-        errorEl.textContent = `Error al guardar: ${error.message}`;
-        errorEl.style.display = 'block';
-    } finally {
-        confirmBtn.disabled = false;
-        confirmBtn.textContent = 'Confirmar y Guardar';
+// --- 9. LÓGICA DE CRUD (MEJORA 3) ---
+
+/**
+ * Maneja el envío del formulario "Añadir Estudiante".
+ */
+function handleAddStudentSubmit(e) {
+    e.preventDefault();
+    
+    // 1. Obtener datos del formulario
+    const newStudent = {
+        "Nombre Completo del Estudiante": document.getElementById('student-name').value.trim(),
+        "Email": document.getElementById('student-email').value.trim(),
+        "Tipo de Documento": document.getElementById('student-doc-type').value,
+        "Número de Documento": document.getElementById('student-doc-number').value.trim(),
+        "Fecha de Nacimiento": document.getElementById('student-birthdate').value.trim(),
+        "Departamento": document.getElementById('student-department').value.trim(),
+        "Colegio/institución": document.getElementById('student-school').value.trim(),
+    };
+
+    // 2. Validar (simple)
+    if (!newStudent["Nombre Completo del Estudiante"] || !newStudent["Número de Documento"] || !newStudent["Fecha de Nacimiento"]) {
+        alert("Nombre, Número de Documento y Fecha de Nacimiento son obligatorios.");
+        return;
+    }
+
+    // 3. Añadir a la cola de pendientes
+    PENDING_CHANGES.student_database.push(newStudent);
+    
+    // 4. Guardar en caché y actualizar UI
+    savePendingChanges();
+    renderPendingChanges();
+    elements.addStudentForm.reset();
+}
+
+/**
+ * Renderiza la lista de cambios pendientes en la UI.
+ */
+function renderPendingChanges() {
+    const container = elements.pendingChangesContainer;
+    container.innerHTML = ""; // Limpiar
+
+    const students = PENDING_CHANGES.student_database;
+
+    if (students.length === 0) {
+        container.innerHTML = `<p id="no-pending-changes" class="text-brand-text/70 text-sm">No hay cambios pendientes para guardar.</p>`;
+        elements.saveChangesBtn.disabled = true;
+        elements.clearCacheBtn.disabled = true;
+    } else {
+        students.forEach((student, index) => {
+            container.innerHTML += `
+                <div class="flex justify-between items-center p-2 rounded ${index % 2 === 0 ? 'bg-slate-100' : ''}">
+                    <span class="text-sm text-brand-header">
+                        <i data-lucide="user-plus" class="w-4 h-4 inline-block mr-2 text-brand-green"></i>
+                        Añadir: <strong>${student["Nombre Completo del Estudiante"]}</strong> (${student["Número de Documento"]})
+                    </span>
+                </div>
+            `;
+        });
+        elements.saveChangesBtn.disabled = false;
+        elements.clearCacheBtn.disabled = false;
+        lucide.createIcons();
     }
 }
 
 /**
- * (v5.1) Obtiene el contenido y 'sha' de un archivo de GitHub.
+ * Carga los cambios pendientes desde localStorage.
  */
-async function getGitHubFile(filePath, token = null) {
-    const { owner, repo, branch } = GITHUB_API_CONFIG;
-    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`;
-    
-    const headers = {
-        'Accept': 'application/vnd.github.v3+json',
-        'Cache-Control': 'no-cache', // Asegurar datos frescos
-        'Pragma': 'no-cache'
-    };
-    if (token) {
-        headers['Authorization'] = `token ${token}`;
+function loadPendingChanges() {
+    const cached = localStorage.getItem('pendingChanges');
+    if (cached) {
+        PENDING_CHANGES = JSON.parse(cached);
+    }
+    renderPendingChanges();
+}
+
+/**
+ * Guarda los cambios pendientes en localStorage.
+ */
+function savePendingChanges() {
+    localStorage.setItem('pendingChanges', JSON.stringify(PENDING_CHANGES));
+}
+
+/**
+ * Limpia la cola de cambios pendientes.
+ */
+function clearPendingChanges() {
+    if (confirm("¿Estás seguro de que quieres descartar todos los cambios pendientes? Esta acción no se puede deshacer.")) {
+        PENDING_CHANGES = { student_database: [] };
+        savePendingChanges();
+        renderPendingChanges();
+    }
+}
+
+/**
+ * Maneja el guardado final de cambios en GitHub.
+ */
+async function handleSaveChanges() {
+    const token = elements.githubTokenInput.value.trim();
+    if (!token) {
+        elements.githubTokenError.textContent = "El token es obligatorio.";
+        elements.githubTokenError.classList.remove('hidden');
+        return;
     }
 
-    const response = await fetch(apiUrl, { method: 'GET', headers });
-    
+    elements.githubTokenError.classList.add('hidden');
+    elements.githubTokenConfirmBtn.disabled = true;
+    elements.githubTokenConfirmBtn.innerHTML = `<div class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"></div> Guardando...`;
+
+    try {
+        // --- 1. Definir Repositorio y Archivo ---
+        const REPO_OWNER = "daniel-alt-pages";
+        const REPO_NAME = "backoup_informes";
+        const REPO_BRANCH = "main";
+        const FILE_PATH = "database/student_database.csv";
+        const API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${FILE_PATH}`;
+
+        // --- 2. Leer el archivo actual de GitHub ---
+        const fileData = await getGitHubFile(API_URL, token);
+        
+        // --- 3. Decodificar y Modificar ---
+        const currentContent = atob(fileData.content); // atob() decodifica Base64
+        let newContent = currentContent;
+        
+        // Añadir las nuevas filas de estudiantes
+        PENDING_CHANGES.student_database.forEach(student => {
+            // El orden debe coincidir EXACTAMENTE con student_database.csv
+            const newCsvRow = [
+                student["Nombre Completo del Estudiante"],
+                student["Email"],
+                student["Tipo de Documento"],
+                student["Número de Documento"],
+                student["Fecha de Nacimiento"],
+                student["Departamento"],
+                student["Colegio/institución"]
+            ].join(',');
+            newContent += `\n${newCsvRow}`;
+        });
+
+        // --- 4. Recodificar y Escribir (Commit) ---
+        const newContentBase64 = btoa(newContent); // btoa() codifica a Base64
+        const commitMessage = `Commit automático: Añadidos ${PENDING_CHANGES.student_database.length} nuevos estudiantes`;
+
+        await updateGitHubFile(API_URL, token, commitMessage, newContentBase64, fileData.sha, REPO_BRANCH);
+
+        // --- 5. Éxito ---
+        alert("¡Cambios guardados con éxito en GitHub!");
+        closeModal(elements.githubTokenModal);
+        clearPendingChanges(); // Limpiar la cola
+        
+        // Recargar los datos de la app
+        elements.globalLoader.classList.remove('opacity-0', 'invisible');
+        await loadAllData();
+        renderAdminStudentTable(); // Actualizar la tabla
+        elements.globalLoader.classList.add('opacity-0', 'invisible');
+
+    } catch (error) {
+        console.error("Error al guardar cambios en GitHub:", error);
+        elements.githubTokenError.textContent = `Error: ${error.message}`;
+        elements.githubTokenError.classList.remove('hidden');
+    } finally {
+        elements.githubTokenConfirmBtn.disabled = false;
+        elements.githubTokenConfirmBtn.innerHTML = `<i data-lucide="check" class="w-4 h-4 mr-2"></i> Confirmar y Guardar`;
+        lucide.createIcons();
+    }
+}
+
+/**
+ * Helper: Obtiene el contenido y 'sha' de un archivo de GitHub.
+ */
+async function getGitHubFile(apiUrl, token) {
+    const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+            'Authorization': `token ${token}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Cache-Control': 'no-cache', // Forzar la última versión
+            'Pragma': 'no-cache'
+        }
+    });
     if (!response.ok) {
-        throw new Error(`Error al leer archivo [${filePath}] de GitHub: ${response.statusText}`);
+        throw new Error(`Error al leer archivo de GitHub: ${response.statusText}`);
     }
     return await response.json(); // Devuelve { content: '...', sha: '...' }
 }
 
 /**
- * (v5.1) Actualiza (hace commit) de un archivo en GitHub.
+ * Helper: Actualiza (hace commit) de un archivo en GitHub.
  */
-async function updateGitHubFile(filePath, token, commitMessage, contentBase64, sha, owner, repo, branch) {
-    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
-
+async function updateGitHubFile(apiUrl, token, commitMessage, contentBase64, sha, branch) {
     const response = await fetch(apiUrl, {
         method: 'PUT',
         headers: {
@@ -1910,171 +1711,94 @@ async function updateGitHubFile(filePath, token, commitMessage, contentBase64, s
         body: JSON.stringify({
             message: commitMessage,
             content: contentBase64,
-            sha: sha,
+            sha: sha, // OBLIGATORIO para actualizar
             branch: branch
         })
     });
-    
     if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(`Error al escribir archivo en GitHub: ${errorData.message || response.statusText}`);
+        throw new Error(`Error al escribir archivo en GitHub: ${response.statusText}`);
     }
     return await response.json();
 }
 
 
-// --- 9. FUNCIONES UTILITARIAS ---
+// --- 10. FUNCIONES UTILITARIAS ---
 
 /**
- * (v5.1) Abre un modal.
+ * Muestra u oculta la contraseña en el formulario de login.
  */
-function openModal(modalBackdrop) {
-    if (!modalBackdrop) return;
-    modalBackdrop.style.display = 'flex';
-    document.body.classList.add('modal-open');
-    // Pequeño delay para permitir la transición de opacidad
-    setTimeout(() => modalBackdrop.classList.add('is-open'), 10);
+function togglePasswordVisibility() {
+    const isPassword = elements.password.type === 'password';
+    elements.password.type = isPassword ? 'text' : 'password';
+    elements.eyeIcon.classList.toggle('hidden', isPassword);
+    elements.eyeOffIcon.classList.toggle('hidden', !isPassword);
 }
 
 /**
- * (v5.1) Cierra un modal.
+ * Abre el sidebar (móvil).
  */
-function closeModal(modalBackdrop) {
-    if (!modalBackdrop) return;
-    modalBackdrop.classList.remove('is-open');
-    document.body.classList.remove('modal-open');
-    // Esperar a que termine la transición antes de ocultarlo
-    setTimeout(() => modalBackdrop.style.display = 'none', 300); // 300ms (duración de la transición)
+function openSidebar() {
+    elements.sidebar.classList.remove('-translate-x-full');
+    elements.sidebarOverlay.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
 }
 
 /**
- * Carga y parsea un archivo CSV desde una URL.
- * @param {string} url - La URL del archivo CSV.
- * @returns {Promise<Array<Object>>} - Una promesa que resuelve a un array de objetos.
+ * Cierra el sidebar (móvil).
  */
-async function fetchAndParseCSV(url) {
-    return new Promise((resolve, reject) => {
-        Papa.parse(url, {
-            download: true,
-            header: true,
-            skipEmptyLines: true,
-            complete: (results) => {
-                if (results.data) {
-                    resolve(results.data);
-                } else {
-                    reject(new Error(`Error al parsear CSV de ${url}: ${results.errors.join(', ')}`));
-                }
-            },
-            error: (error) => {
-                reject(new Error(`Error al descargar CSV de ${url}: ${error.message}`));
-            }
-        });
-    });
+function closeSidebar() {
+    elements.sidebar.classList.add('-translate-x-full');
+    elements.sidebarOverlay.classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
 }
 
 /**
- * Carga los datos de una prueba (claves y respuestas del estudiante).
- * Usa la caché si está disponible.
- * @param {string} testId
- * @param {string} studentDocNumber
- * @returns {Promise<Object>} - { keys: {s1, s2}, answers: {s1, s2} }
+ * Muestra un modal por su ID.
+ * @param {HTMLElement} modalElement - El elemento del modal backdrop.
  */
-async function getTestAnswersAndKey(testId, studentDocNumber) {
-    const testInfo = TEST_INDEX[testId];
-    if (!testInfo) throw new Error("Índice de prueba no encontrado");
+function showModal(modalElement) {
+    if (!modalElement) return;
+    modalElement.classList.add('shown');
+    document.body.classList.add('overflow-hidden'); // Evitar scroll de fondo
 
-    const cacheKey = `${testId}_${studentDocNumber}`;
-    if (CACHED_TEST_DATA[cacheKey]) {
-        return CACHED_TEST_DATA[cacheKey];
+    // Si es el modal de gráfico, renderizarlo
+    if (modalElement.id === 'growth-chart-modal') {
+        renderGrowthChart('all'); // Renderizar con filtro "all" por defecto
     }
-
-    const isSimulacro = testInfo.type === 'simulacro';
-    let keys = {}, answers = {};
-
-    // Cargar Claves
-    if (isSimulacro) {
-        const [keysS1, keysS2] = await Promise.all([
-            fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.keys_s1}`),
-            fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.keys_s2}`)
-        ]);
-        keys = { s1: keysS1[0], s2: keysS2[0] };
-    } else {
-        const keysData = await fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.keys}`);
-        keys = keysData[0];
-    }
-
-    // Cargar Respuestas del Estudiante
-    if (isSimulacro) {
-        const [answersS1, answersS2] = await Promise.all([
-            fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.answers_s1}`),
-            fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.answers_s2}`)
-        ]);
-        answers = {
-            s1: answersS1.find(row => row.ID.trim() === studentDocNumber),
-            s2: answersS2.find(row => row.ID.trim() === studentDocNumber)
-        };
-    } else {
-        const answersData = await fetchAndParseCSV(`${BASE_DATA_URL}${testInfo.answers}`);
-        answers = answersData.find(row => row.ID.trim() === studentDocNumber);
-    }
-    
-    if (!answers || (!isSimulacro && !answers) || (isSimulacro && (!answers.s1 || !answers.s2))) {
-        console.warn(`No se encontraron las respuestas del estudiante ${studentDocNumber} para la prueba ${testId}.`);
-        // Continuar de todas formas para mostrar al menos las claves
-    }
-
-    const result = { keys, answers };
-    CACHED_TEST_DATA[cacheKey] = result; // Guardar en caché
-    return result;
 }
 
 /**
- * Carga y parsea el archivo de videos de retroalimentación.
- * @param {string} testId
- * @returns {Promise<Array<Object>>}
+ * Cierra un modal.
+ * @param {HTMLElement} modalElement - El elemento del modal backdrop.
  */
-async function getTestVideoLinks(testId) {
-    const videoPath = TEST_INDEX[testId]?.videos;
-    if (!videoPath) return [];
+function closeModal(modalElement) {
+    if (!modalElement) return;
+    modalElement.classList.remove('shown');
+    document.body.classList.remove('overflow-hidden');
 
-    const cacheKey = `videos_${testId}`;
-    if (CACHED_TEST_DATA[cacheKey]) {
-        return CACHED_TEST_DATA[cacheKey];
+    // Limpiar modal de token
+    if (modalElement.id === 'github-token-modal') {
+        elements.githubTokenInput.value = "";
+        elements.githubTokenError.classList.add('hidden');
     }
+}
 
+/**
+ * Formatea una fecha de "YYYY-MM-DD" a "DD de Mes de YYYY".
+ * @param {string} dateString - Fecha en formato YYYY-MM-DD.
+ * @returns {string} Fecha formateada.
+ */
+function formatDate(dateString) {
     try {
-        const response = await fetch(`${BASE_DATA_URL}${videoPath}?t=${TIMESTAMP}`);
-        if (!response.ok) throw new Error("Archivo de video no encontrado.");
-        
-        const text = await response.text();
-        const links = parseVideoText(text);
-        
-        CACHED_TEST_DATA[cacheKey] = links; // Guardar en caché
-        return links;
-    } catch (error) {
-        console.error("Error cargando videos:", error);
-        return [];
+        const [year, month, day] = dateString.split('-').map(Number);
+        const date = new Date(year, month - 1, day);
+        return date.toLocaleDateString('es-ES', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            timeZone: 'UTC' // Importante para evitar desfase de día
+        });
+    } catch (e) {
+        return dateString; // Devolver original si falla
     }
-}
-
-/**
- * Parsea el texto de retroalimentación de video.
- * @param {string} text - El contenido del archivo bd_retro_...txt.
- * @returns {Array<Object>}
- */
-function parseVideoText(text) {
-    const links = [];
-    const lines = text.split('\n');
-    lines.forEach(line => {
-        const parts = line.split(';');
-        if (parts.length >= 3) {
-            links.push({
-                subject: parts[0].trim(),
-                range: parts[1].trim(),
-                url: parts[2].trim(),
-                img: parts[3]?.trim() || null
-            });
-        }
-    });
-    return links;
 }
