@@ -18,15 +18,18 @@
     <link rel="stylesheet" href="./style.css">
 
     <script>
-        // Configuración de Tailwind CSS (para que coincida con style.css)
+        // Configuración de Tailwind CSS (v7.0)
         tailwind.config = {
             theme: {
                 extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
                     colors: {
                         'brand-primary': '#F97316',
                         'brand-secondary': '#3B82F6',
                         'brand-blue-dark': '#1e40af',
-                        'brand-bg': '#f8fafc', // Un fondo más limpio (slate-50)
+                        'brand-bg': '#f8fafc', // (DISEÑO v7.0) Fondo más limpio: slate-50
                         'brand-text': '#334155', // slate-700
                         'brand-header': '#0f172a', // slate-900
                         'brand-surface': '#ffffff', // white
@@ -127,7 +130,7 @@
     <div id="app-container" class="hidden">
         
         <!-- Barra Lateral (Sidebar) -->
-        <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 w-64 bg-brand-surface border-r border-brand-border flex-col transition-transform duration-300 ease-in-out -translate-x-full md:translate-x-0">
+        <aside id="sidebar" class="fixed inset-y-0 left-0 z-30 w-64 bg-brand-surface border-r border-brand-border flex flex-col transition-transform duration-300 ease-in-out -translate-x-full md:translate-x-0">
             <!-- Logo Header -->
             <div class="flex items-center justify-between h-16 px-4 border-b border-brand-border">
                 <div class="flex items-center gap-2">
@@ -233,9 +236,9 @@
                 <!-- SECCIÓN: DASHBOARD ESTUDIANTE (MIS INFORMES)            -->
                 <!-- ====================================================== -->
                 <section id="student-dashboard-section" class="app-section">
-                    <div class="flex items-center justify-between mb-4">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-5">
                         <h2 class="text-2xl font-bold text-brand-header">Mis Informes</h2>
-                        <button id="show-growth-chart-btn" class="button-secondary">
+                        <button id="show-growth-chart-btn" class="button-secondary mt-2 sm:mt-0">
                             <i data-lucide="trending-up" class="w-4 h-4 mr-2"></i>
                             Ver Mi Progreso
                         </button>
@@ -307,13 +310,13 @@
 
                     <!-- 2. Gráficos Globales -->
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div class="bg-brand-surface p-5 rounded-lg shadow-sm border border-brand-border">
+                        <div class="bg-brand-surface p-5 rounded-xl shadow-sm border border-brand-border">
                             <h3 class="text-lg font-semibold text-brand-header mb-4">Promedio Global por Materia</h3>
                             <div class="h-64">
                                 <canvas id="admin-avg-subjects-chart"></canvas>
                             </div>
                         </div>
-                        <div class="bg-brand-surface p-5 rounded-lg shadow-sm border border-brand-border">
+                        <div class="bg-brand-surface p-5 rounded-xl shadow-sm border border-brand-border">
                             <h3 class="text-lg font-semibold text-brand-header mb-4">Distribución de Puntajes Globales</h3>
                             <div class="h-64">
                                 <canvas id="admin-global-score-dist-chart"></canvas>
@@ -326,13 +329,14 @@
                 <!-- SECCIÓN: GESTIÓN DE ESTUDIANTES (ADMIN)                 -->
                 <!-- ====================================================== -->
                 <section id="admin-students-section" class="app-section hidden">
-                    <div class="bg-brand-surface p-6 rounded-lg shadow-sm border border-brand-border">
+                    <div class="bg-brand-surface p-6 rounded-xl shadow-sm border border-brand-border">
                         <h2 class="text-2xl font-bold text-brand-header mb-4">Gestión de Estudiantes</h2>
                         
                         <!-- Barra de Búsqueda y Paginación -->
                         <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
-                            <div class="w-full md:w-1/3">
-                                <input type="text" id="admin-student-search" class="form-input" placeholder="Buscar por nombre o documento...">
+                            <div class="relative w-full md:w-1/3">
+                                <input type="text" id="admin-student-search" class="form-input !pl-10" placeholder="Buscar por nombre o documento...">
+                                <i data-lucide="search" class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-brand-text/40"></i>
                             </div>
                             <div id="admin-pagination-controls" class="flex items-center gap-2">
                                 <!-- Controles se generan con JS -->
@@ -364,7 +368,7 @@
                 <!-- SECCIÓN: ANÁLISIS DE ÍTEMS (ADMIN)                      -->
                 <!-- ====================================================== -->
                 <section id="admin-stats-section" class="app-section hidden">
-                    <div class="bg-brand-surface p-6 rounded-lg shadow-sm border border-brand-border">
+                    <div class="bg-brand-surface p-6 rounded-xl shadow-sm border border-brand-border">
                         <h2 class="text-2xl font-bold text-brand-header mb-4">Análisis Estadístico de Ítems</h2>
                         
                         <!-- Barra de Filtros -->
@@ -413,7 +417,7 @@
                 <!-- SECCIÓN: GESTIÓN DE DATOS (CRUD ADMIN)                  -->
                 <!-- ====================================================== -->
                 <section id="admin-crud-section" class="app-section hidden">
-                    <div class="bg-brand-surface p-6 rounded-lg shadow-sm border border-brand-border">
+                    <div class="bg-brand-surface p-6 rounded-xl shadow-sm border border-brand-border">
                         <h2 class="text-2xl font-bold text-brand-header mb-4">Gestión de Datos (CRUD)</h2>
                         <p class="text-sm text-brand-text/80 mb-6">
                             Añade nuevos estudiantes a la base de datos. Los cambios se guardarán en caché y se enviarán a GitHub cuando hagas clic en "Guardar Cambios".
@@ -532,7 +536,7 @@
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
-            <div id="admin-student-modal-body" class="p-6 max-h-[70vh] overflow-y-auto">
+            <div id="admin-student-modal-body" class="p-6 max-h-[70vh] overflow-y-auto space-y-4">
                 <!-- Contenido se genera con JS -->
             </div>
         </div>
