@@ -4,7 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Plataforma de Informes (v7.0)</title>
+    <!-- Título actualizado -->
+    <title>Plataforma de Informes (v7.1)</title>
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -14,12 +15,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
-    <!-- 
-        (v7.0) ESTILOS PERSONALIZADOS
-        Se movió el contenido de style.css aquí, usando type="text/tailwindcss"
-        para que el CDN de Tailwind pueda procesar las directivas @apply.
-        El archivo style.css original ya no es necesario.
-    -->
     <style type="text/tailwindcss">
         /* --- VARIABLES DE COLOR CSS --- */
         :root {
@@ -593,6 +588,26 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- 
+                        ******************************************************
+                        * INICIO DE LA MODIFICACIÓN (v7.1)
+                        * Añadimos un nuevo contenedor para el gráfico de región.
+                        ******************************************************
+                    -->
+                    <div class="bg-brand-surface p-5 rounded-xl shadow-sm border border-brand-border mt-6">
+                        <h3 class="text-lg font-semibold text-brand-header mb-4">Rendimiento Promedio por Departamento</h3>
+                        <p class="text-sm text-brand-text/70 mb-4 -mt-3">
+                            Muestra el puntaje global promedio de los estudiantes, agrupados por departamento.
+                            (Solo se muestran departamentos con más de 1 estudiante).
+                        </p>
+                        <div class="h-80">
+                            <!-- Este es el nuevo canvas para el gráfico -->
+                            <canvas id="admin-region-chart"></canvas>
+                        </div>
+                    </div>
+                    <!-- FIN DE LA MODIFICACIÓN (v7.1) -->
+
                 </section>
 
                 <!-- ====================================================== -->
@@ -860,7 +875,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <!-- 4. Tu script principal (se ejecuta DESPUÉS de las librerías) -->
-    <!-- (v7.0) Este script ha sido refactorizado a una arquitectura modular -->
+    <!-- (v7.1) Script actualizado -->
     <script src="./script.js"></script>
 
 </body>
