@@ -1,11 +1,11 @@
 /* ========================================================================
-   PLATAFORMA DE INFORMES v7.0 (Refactor Modular)
+   PLATAFORMA DE INFORMES v7.1 (Refactor Modular)
    ------------------------------------------------------------------------
    Autor: Daniel Altamar (con Asistente de Programación)
    Fecha: 2025-11-11
-   Descripción: (v7.0) Refactorización a una arquitectura modular y 
-                basada en estado para mejorar la mantenibilidad. Se ha
-                movido toda la lógica global a un objeto 'App'.
+   Descripción: (v7.1) Añadido gráfico de rendimiento por región
+                al dashboard de administrador para mejor
+                aprovechamiento de datos.
    ======================================================================== */
 
 // Usar 'strict mode' para buenas prácticas
@@ -71,7 +71,8 @@ const App = {
         growth: null,
         radar: null,
         adminAvgSubjects: null,
-        adminGlobalScoreDist: null
+        adminGlobalScoreDist: null,
+        adminRegionChart: null // (v7.1) Añadido
     },
 
     // --- 2. INICIALIZACIÓN ---
@@ -81,7 +82,7 @@ const App = {
      * Se llama cuando el DOM está listo.
      */
     init() {
-        console.log("App.init() v7.0 - Modular");
+        console.log("App.init() v7.1 - Modular"); // Versión actualizada
         this.elements = this.DOM.queryAll();
         this.DOM.setupEventListeners();
         this.API.loadAllData();
@@ -202,40 +203,33 @@ const App = {
          */
         async getTestAnswersAndKey(testId) {
             // 1. Revisar caché
-            if (App.state.cachedTestData[testId]) {
+            if (App.state.cachedTestData[testId] && App.state.cachedTestData[testId].analysis) {
+                 // Si ya tiene el análisis, es la versión más completa, devolverla
                 return App.state.cachedTestData[testId];
             }
 
             const testInfo = App.state.testIndex[testId];
             if (!testInfo) throw new Error(`No se encontró info para la prueba ${testId}`);
 
-            const isSimulacro = testInfo.type === 'simulacro';
-            const dataToLoad = {};
+            // Si está en caché pero sin análisis, lo usamos como base
+            const dataToLoad = App.state.cachedTestData[testId] || {};
             const baseUrl = App.config.BASE_DATA_URL;
             const ts = App.config.TIMESTAMP;
 
             try {
+                // Solo cargar lo que falta
+                const isSimulacro = testInfo.type === 'simulacro';
                 if (isSimulacro) {
-                    const [ans1, ans2, key1, key2] = await Promise.all([
-                        this.fetchAndParseCSV(`${baseUrl}${testInfo.answers_s1}?t=${ts}`),
-                        this.fetchAndParseCSV(`${baseUrl}${testInfo.answers_s2}?t=${ts}`),
-                        this.fetchAndParseCSV(`${baseUrl}${testInfo.keys_s1}?t=${ts}`),
-                        this.fetchAndParseCSV(`${baseUrl}${testInfo.keys_s2}?t=${ts}`)
-                    ]);
-                    dataToLoad.answers_s1 = ans1;
-                    dataToLoad.answers_s2 = ans2;
-                    dataToLoad.key_s1 = key1[0]; // Las claves son solo la primera fila
-                    dataToLoad.key_s2 = key2[0];
+                    if (!dataToLoad.answers_s1) dataToLoad.answers_s1 = await this.fetchAndParseCSV(`${baseUrl}${testInfo.answers_s1}?t=${ts}`);
+                    if (!dataToLoad.answers_s2) dataToLoad.answers_s2 = await this.fetchAndParseCSV(`${baseUrl}${testInfo.answers_s2}?t=${ts}`);
+                    if (!dataToLoad.key_s1) dataToLoad.key_s1 = (await this.fetchAndParseCSV(`${baseUrl}${testInfo.keys_s1}?t=${ts}`))[0];
+                    if (!dataToLoad.key_s2) dataToLoad.key_s2 = (await this.fetchAndParseCSV(`${baseUrl}${testInfo.keys_s2}?t=${ts}`))[0];
                 } else {
-                    const [ans, key] = await Promise.all([
-                        this.fetchAndParseCSV(`${baseUrl}${testInfo.answers}?t=${ts}`),
-                        this.fetchAndParseCSV(`${baseUrl}${testInfo.keys}?t=${ts}`)
-                    ]);
-                    dataToLoad.answers = ans;
-                    dataToLoad.key = key[0];
+                    if (!dataToLoad.answers) dataToLoad.answers = await this.fetchAndParseCSV(`${baseUrl}${testInfo.answers}?t=${ts}`);
+                    if (!dataToLoad.key) dataToLoad.key = (await this.fetchAndParseCSV(`${baseUrl}${testInfo.keys}?t=${ts}`))[0];
                 }
                 
-                if (testInfo.videos) {
+                if (testInfo.videos && !dataToLoad.videos) {
                     const videoResponse = await fetch(`${baseUrl}${testInfo.videos}?t=${ts}`);
                     if (videoResponse.ok) {
                         dataToLoad.videos = await videoResponse.text();
@@ -647,6 +641,7 @@ const App = {
             // 2. Renderizar Gráficos
             App.Charts.renderAdminAvgSubjectsChart();
             App.Charts.renderAdminGlobalScoreDistChart();
+            App.Charts.renderAdminRegionChart(); // (v7.1) Llamar al nuevo gráfico
             
             lucide.createIcons();
         },
@@ -1242,7 +1237,88 @@ const App = {
                     plugins: { legend: { display: false } }
                 }
             });
-        }
+        },
+
+        /**
+         * (v7.1) NUEVA FUNCIÓN
+         * Renderiza el gráfico de rendimiento promedio por región (Admin).
+         */
+        renderAdminRegionChart() {
+            const ctx = App.elements.adminRegionChart?.getContext('2d');
+            if (!ctx) return;
+
+            // 1. Procesar datos
+            const regionData = {}; // { "Departamento": { totalScore: 0, count: 0 } }
+
+            App.state.scoresDB.forEach(score => {
+                const student = App.state.studentDB[score.doc_number];
+                if (student && student.Departamento) {
+                    const region = student.Departamento.trim();
+                    if (!regionData[region]) {
+                        regionData[region] = { totalScore: 0, count: 0 };
+                    }
+                    regionData[region].totalScore += score.global_score;
+                    regionData[region].count++;
+                }
+            });
+
+            // 2. Calcular promedios y ordenar
+            const regionAverages = Object.keys(regionData)
+                .map(region => ({
+                    region: region,
+                    average: regionData[region].totalScore / regionData[region].count
+                }))
+                .filter(d => d.average > 0 && regionData[d.region].count > 1) // Filtrar regiones con 1 solo estudiante
+                .sort((a, b) => b.average - a.average); // Ordenar de mayor a menor
+
+            const labels = regionAverages.map(d => d.region);
+            const data = regionAverages.map(d => d.average.toFixed(0));
+
+            // 3. Renderizar gráfico
+            if (App.charts.adminRegionChart) App.charts.adminRegionChart.destroy();
+
+            App.charts.adminRegionChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Puntaje Global Promedio',
+                        data: data,
+                        backgroundColor: 'rgba(59, 130, 246, 0.7)', // --brand-secondary
+                        borderColor: 'var(--brand-secondary)',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { 
+                            beginAtZero: false, 
+                            min: Math.max(0, Math.min(...data) - 20), // Empezar cerca del valor más bajo
+                            max: 500, 
+                            title: { display: true, text: 'Puntaje Promedio' } 
+                        },
+                        x: { 
+                            ticks: { 
+                                autoSkip: false, 
+                                maxRotation: 90, 
+                                minRotation: 45 
+                            } 
+                        } // Rotar etiquetas si son muchas
+                    },
+                    plugins: { 
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (item) => `Promedio: ${item.raw}`
+                            }
+                        }
+                    }
+                }
+            });
+        },
     },
 
     // --- 8. LÓGICA DE ANÁLISIS DE ÍTEMS (MEJORA 1) ---
@@ -1265,19 +1341,25 @@ const App = {
             App.elements.statsSubjectFilter.disabled = true;
 
             try {
+                // (v7.1) Usar getTestAnswersAndKey para asegurar que todos los datos se carguen
                 const testData = await App.API.getTestAnswersAndKey(testId);
-                const analysis = this.analyzeTestItems(testId, testData);
                 
-                App.Render.renderStatsCards(analysis);
+                // (v7.1) Almacenar el análisis en el caché para no recalcular
+                if (!testData.analysis) {
+                    testData.analysis = this.analyzeTestItems(testId, testData);
+                    App.state.cachedTestData[testId] = testData;
+                }
                 
-                const subjects = [...new Set(Object.values(analysis).map(item => item.materia))];
+                App.Render.renderStatsCards(testData.analysis);
+                
+                const subjects = [...new Set(Object.values(testData.analysis).map(item => item.materia))];
                 subjects.sort().forEach(subject => {
                     App.elements.statsSubjectFilter.innerHTML += `<option value="${subject}">${subject}</option>`;
                 });
                 
                 App.elements.statsSubjectFilter.disabled = false;
                 
-                App.elements.statsResultsTitle.textContent = `Análisis de ${Object.keys(analysis).length} ítems para: ${App.state.testIndex[testId].name}`;
+                App.elements.statsResultsTitle.textContent = `Análisis de ${Object.keys(testData.analysis).length} ítems para: ${App.state.testIndex[testId].name}`;
                 App.elements.statsResultsContainer.classList.remove('hidden');
 
             } catch (error) {
@@ -1313,7 +1395,7 @@ const App = {
                 if (!header || !keysMap[header]) continue;
                 stats[header] = {
                     pregunta: header,
-                    materia: header.split(' ')[0],
+                    materia: header.split(' ')[0], // Asume "Materia S1 [1]"
                     correcta: keysMap[header].trim().toUpperCase(),
                     A: 0, B: 0, C: 0, D: 0, Omision: 0,
                     total: 0,
@@ -1528,6 +1610,7 @@ const App = {
             elements.kpiAvgMinis = document.getElementById('kpi-avg-minis');
             elements.adminAvgSubjectsChart = document.getElementById('admin-avg-subjects-chart');
             elements.adminGlobalScoreDistChart = document.getElementById('admin-global-score-dist-chart');
+            elements.adminRegionChart = document.getElementById('admin-region-chart'); // (v7.1) Añadido
 
             // Gestión Estudiantes (Admin)
             elements.adminStudentSearch = document.getElementById('admin-student-search');
@@ -1639,12 +1722,13 @@ const App = {
             // Admin: Análisis de Ítems
             els.statsAnalyzeBtn?.addEventListener('click', App.Stats.handleAnalyzeItems.bind(App.Stats));
             els.statsSubjectFilter?.addEventListener('change', () => {
-                // El handler principal (handleAnalyzeItems) ya tiene los datos cacheados
-                // Solo necesitamos re-renderizar las tarjetas con el filtro
-                App.Render.renderStatsCards(
-                    App.state.cachedTestData[els.statsTestSelect.value]?.analysis, // Usar data cacheada
-                    els.statsSubjectFilter.value
-                );
+                const testId = App.elements.statsTestSelect.value;
+                if(testId && App.state.cachedTestData[testId] && App.state.cachedTestData[testId].analysis) {
+                    App.Render.renderStatsCards(
+                        App.state.cachedTestData[testId].analysis, // Usar data cacheada
+                        els.statsSubjectFilter.value
+                    );
+                }
             });
 
             // Admin: CRUD
