@@ -1,11 +1,10 @@
 /* ========================================================================
-   PLATAFORMA DE INFORMES v6.6
+   PLATAFORMA DE INFORMES v7.0
    ------------------------------------------------------------------------
    Autor: Daniel Altamar (con Asistente de Programación)
    Fecha: 2025-11-07
    Descripción: Lógica principal para la plataforma de informes.
-   Maneja el login, la carga de datos (CSV/JSON) y la renderización
-   de dashboards para estudiantes y administradores.
+   (v7.0) - Actualización de diseño: Iconos de materias añadidos.
    ======================================================================== */
 
 // --- 1. CONFIGURACIÓN GLOBAL Y VARIABLES DE ESTADO ---
@@ -486,6 +485,9 @@ function initializeApp() {
     // Ocultar login y mostrar app
     elements.loginScreen?.classList.add('hidden');
     elements.appContainer?.classList.remove('hidden');
+    
+    // (DISEÑO v7.0) Llamar a createIcons DESPUÉS de mostrar la app
+    lucide.createIcons();
 }
 
 /**
@@ -591,7 +593,7 @@ function showStudentDashboard() {
                     <span class="text-3xl font-extrabold text-brand-secondary">${report.global_score}</span>
                 </div>
                 <div class="flex justify-end">
-                    <span class="inline-flex items-center text-sm font-medium text-brand-secondary">
+                    <span class="inline-flex items-center text-sm font-medium text-brand-secondary hover:underline">
                         Ver Informe Completo
                         <i data-lucide="arrow-right" class="w-4 h-4 ml-1"></i>
                     </span>
@@ -653,6 +655,8 @@ function showAdminStats() {
     for (const testId in TEST_INDEX) {
         elements.statsTestSelect.innerHTML += `<option value="${testId}">${TEST_INDEX[testId].name}</option>`;
     }
+    
+    lucide.createIcons();
 }
 
 /**
@@ -707,7 +711,7 @@ async function showIndividualReport(testId) {
 
         // Generar HTML del informe
         const scoreCardsHtml = generateScoreCardsHtml(report);
-        const radarChartHtml = `<div class="bg-brand-surface p-6 rounded-lg shadow-sm border border-brand-border"><h3 class="text-xl font-bold text-brand-header mb-4">Perfil de Desempeño (Radar)</h3><div class="h-80 max-w-lg mx-auto"><canvas id="radarChart"></canvas></div></div>`;
+        const radarChartHtml = `<div class="bg-brand-surface p-6 rounded-xl shadow-sm border border-brand-border"><h3 class="text-xl font-bold text-brand-header mb-4">Perfil de Desempeño (Radar)</h3><div class="h-80 max-w-lg mx-auto"><canvas id="radarChart"></canvas></div></div>`;
         const feedbackHtml = generateFeedbackHtml(testInfo, testData, studentAnswers);
 
         elements.reportContentContainer.innerHTML = `
@@ -737,17 +741,18 @@ async function showIndividualReport(testId) {
  * @returns {string} HTML
  */
 function generateScoreCardsHtml(report) {
+    // (DISEÑO v7.0) - Iconos de Lucide añadidos
     const subjects = [
-        { name: 'Lectura Crítica', score: report.lec_score, color: 'color-lectura' },
-        { name: 'Matemáticas', score: report.mat_score, color: 'color-matematicas' },
-        { name: 'Sociales', score: report.soc_score, color: 'color-sociales' },
-        { name: 'Ciencias', score: report.cie_score, color: 'color-ciencias' },
-        { name: 'Inglés', score: report.ing_score, color: 'color-ingles' },
+        { name: 'Lectura Crítica', score: report.lec_score, color: 'color-lectura', icon: 'book-open' },
+        { name: 'Matemáticas', score: report.mat_score, color: 'color-matematicas', icon: 'calculator' },
+        { name: 'Sociales', score: report.soc_score, color: 'color-sociales', icon: 'landmark' },
+        { name: 'Ciencias', score: report.cie_score, color: 'color-ciencias', icon: 'flask-conical' },
+        { name: 'Inglés', score: report.ing_score, color: 'color-ingles', icon: 'languages' },
     ];
 
     let subjectCardsHtml = subjects.map(s => `
         <div class="score-card" style="--subject-color: var(--${s.color});">
-            <svg class="subject-icon" style="color: var(--subject-color);" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M... (icono genérico o específico) ..."/></svg>
+            <i data-lucide="${s.icon}" class="subject-icon" style="color: var(--subject-color);"></i>
             <p class="score-value" style="color: var(--subject-color);">${s.score}<span class="text-2xl text-brand-text/50">/100</span></p>
             <p class="score-label">${s.name}</p>
         </div>
@@ -756,7 +761,7 @@ function generateScoreCardsHtml(report) {
     return `
         <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
             <!-- Puntaje Global -->
-            <div class="md:col-span-1 bg-brand-surface p-6 rounded-lg shadow-sm border border-brand-border flex flex-col items-center justify-center text-center">
+            <div class="md:col-span-1 bg-brand-surface p-6 rounded-xl shadow-sm border border-brand-border flex flex-col items-center justify-center text-center">
                 <p class="text-sm font-medium text-brand-text/80 uppercase tracking-wide">Puntaje Global</p>
                 <p class="text-7xl font-extrabold text-brand-header my-2">${report.global_score}</p>
                 <p class="text-2xl font-medium text-brand-text/50">/ 500</p>
@@ -767,8 +772,6 @@ function generateScoreCardsHtml(report) {
             </div>
         </div>
     `;
-    // Nota: El SVG del icono de materia debe ser reemplazado por los SVGs reales.
-    // Por simplicidad, se omite aquí, pero la lógica de color es correcta.
 }
 
 /**
@@ -786,7 +789,7 @@ function generateFeedbackHtml(testInfo, testData, studentAnswers) {
         const tableS1 = generateFeedbackTable(testData.key_s1, studentAnswers);
         const tableS2 = generateFeedbackTable(testData.key_s2, studentAnswers);
         feedbackHtml = `
-            <div class="bg-brand-surface p-6 rounded-lg shadow-sm border border-brand-border">
+            <div class="bg-brand-surface p-6 rounded-xl shadow-sm border border-brand-border">
                 <h3 class="text-xl font-bold text-brand-header mb-4">Feedback Detallado por Pregunta</h3>
                 <!-- Pestañas -->
                 <div class="border-b border-brand-border">
@@ -804,7 +807,7 @@ function generateFeedbackHtml(testInfo, testData, studentAnswers) {
         // Generar 1 tabla (minisimulacro)
         const table = generateFeedbackTable(testData.key, studentAnswers);
         feedbackHtml = `
-            <div class="bg-brand-surface p-6 rounded-lg shadow-sm border border-brand-border">
+            <div class="bg-brand-surface p-6 rounded-xl shadow-sm border border-brand-border">
                 <h3 class="text-xl font-bold text-brand-header mb-4">Feedback Detallado por Pregunta</h3>
                 <div class="py-4">${table}</div>
             </div>
@@ -1003,7 +1006,7 @@ function showAdminStudentHistory(docNumber) {
                         <span class="text-3xl font-extrabold text-brand-secondary">${report.global_score}</span>
                     </div>
                     <div class="flex justify-end">
-                        <span class="inline-flex items-center text-sm font-medium text-brand-secondary">
+                        <span class="inline-flex items-center text-sm font-medium text-brand-secondary hover:underline">
                             Suplantar y Ver Informe
                             <i data-lucide="arrow-right" class="w-4 h-4 ml-1"></i>
                         </span>
