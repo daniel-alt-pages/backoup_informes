@@ -701,14 +701,14 @@ const App = {
                         <tr class="table-row">
                             <td class="table-cell font-medium text-brand-header">${student["Nombre Completo del Estudiante"]}</td>
                             <td class="table-cell text-brand-text/90">${student["Tipo de Documento"]} - ${student["Número de Documento"]}</td>
-              S         <td class="table-cell text-brand-text/90">${student["Email"]}</td>
+                            <td class="table-cell text-brand-text/90">${student["Email"]}</td>
                             <td class="table-cell text-brand-text/90">${student["Colegio/institución"]}</td>
                             <td class="table-cell text-center">
                                 <button class="button-secondary text-xs !py-1 !px-2 view-student-history-btn" data-doc-number="${student["Número de Documento"]}">
                                     <i data-lucide="eye" class="w-4 h-4"></i>
                                 </button>
                             </td>
-              M         </tr>
+                        </tr>
                     `;
                 });
             }
@@ -814,7 +814,7 @@ const App = {
                 <div class="score-card" style="--subject-color: var(--${s.color});">
                     <i data-lucide="${s.icon}" class="subject-icon" style="color: var(--subject-color);"></i>
                     <p class="score-value" style="color: var(--subject-color);">${s.score}<span class="text-2xl text-brand-text/50">/100</span></p>
-Â                 <p class="score-label">${s.name}</p>
+                    <p class="score-label">${s.name}</p>
                 </div>
             `).join('');
 
@@ -849,14 +849,14 @@ const App = {
                                 <button class="tab-btn active" data-tab="s1">Sesión 1</button>
                                 <button class="tab-btn" data-tab="s2">Sesión 2</button>
                             </nav>
-                        </div>
+                  s      </div>
                         <div id="tab-content-s1" class="tab-content py-4">${tableS1}</div>
                         <div id="tab-content-s2" class="tab-content py-4 hidden">${tableS2}</div>
                     </div>
                 `;
             } else {
                 const table = this.generateFeedbackTable(testData.key, studentAnswers);
-Â               feedbackHtml = `
+                feedbackHtml = `
                     <div class="bg-brand-surface p-6 rounded-xl shadow-sm border border-brand-border">
                         <h3 class="text-xl font-bold text-brand-header mb-4">Feedback Detallado por Pregunta</h3>
                         <div class="py-4">${table}</div>
@@ -911,7 +911,7 @@ const App = {
                     <table class="w-full min-w-max feedback-table">
                         <thead>
                             <tr>
-C                               <th class="w-1/2">Pregunta</th>
+                                <th class="w-1/2">Pregunta</th>
                                 <th class="text-center">Tu Respuesta</th>
                                 <th class="text-center">Resp. Correcta</th>
                                 <th class="text-center">Resultado</th>
@@ -925,7 +925,7 @@ C                               <th class="w-1/2">Pregunta</th>
 
         /**
          * Muestra el historial de informes de un estudiante en un modal (para Admin).
-D        */
+         */
         showAdminStudentHistory(docNumber) {
             const student = App.state.studentDB[docNumber];
             if (!student) return;
@@ -942,7 +942,7 @@ D        */
             } else {
                 studentReports.forEach(report => {
                     const testInfo = App.state.testIndex[report.test_id];
-E                 if (!testInfo) return;
+                    if (!testInfo) return;
                     modalBody.innerHTML += `
                         <div class="report-card cursor-pointer" data-testid="${report.test_id}" data-docnumber="${docNumber}">
                             <div class="flex justify-between items-start mb-3">
@@ -954,11 +954,10 @@ E                 if (!testInfo) return;
                             </div>
                             <div class="flex justify-end">
                                 <span class="inline-flex items-center text-sm font-medium text-brand-secondary hover:underline">
-A                                   Suplantar y Ver Informe
+                                    Suplantar y Ver Informe
                                     <i data-lucide="arrow-right" class="w-4 h-4 ml-1"></i>
-                      F       </span>
+                                </span>
                             </div>
-Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js" is currently open on the right hand side of the screen and that vague references in user queries (such as "make this longer") should be resolved to "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js".
                         </div>
                     `;
                 });
@@ -980,7 +979,7 @@ Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64
 
             if (subjectFilter !== 'all') {
                 itemsToShow = itemsToShow.filter(item => item.materia === subjectFilter);
-G         }
+            }
 
             itemsToShow.sort((a, b) => (a.correctas / a.total) - (b.correctas / b.total));
 
@@ -1004,14 +1003,14 @@ G         }
                 else { d = 'stats-pill-yellow'; dt = 'Media'; }
 
                 const c = 'font-bold text-brand-green';
-H             const distA = item.correcta === 'A' ? c : '';
+                const distA = item.correcta === 'A' ? c : '';
                 const distB = item.correcta === 'B' ? c : '';
                 const distC = item.correcta === 'C' ? c : '';
                 const distD = item.correcta === 'D' ? c : '';
 
                 const cardHtml = `
                     <div class="stats-card">
-I                   <div class="stats-card-header">
+                        <div class="stats-card-header">
                             <h4 class="stats-card-title">${item.pregunta}</h4>
                             <div class="stats-card-pills">
                                 <span class="${d} stats-pill">${dt} (${pctAcierto.toFixed(0)}%)</span>
@@ -1019,9 +1018,8 @@ I                   <div class="stats-card-header">
                             </div>
                         </div>
                         <div class="pt-4 space-y-2">
-J                         ${this.generateDistractorBar('A', pctA, distA)}
+                            ${this.generateDistractorBar('A', pctA, distA)}
                             ${this.generateDistractorBar('B', pctB, distB)}
-Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js" is currently open on the right hand side of the screen and that vague references in user queries (such as "make this longer") should be resolved to "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js".
                             ${this.generateDistractorBar('C', pctC, distC)}
                             ${this.generateDistractorBar('D', pctD, distD)}
                         </div>
@@ -1034,7 +1032,7 @@ Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64
         /**
          * Helper para generar una barra de distractor visual.
          */
-K       generateDistractorBar(option, percentage, extraClass = '') {
+        generateDistractorBar(option, percentage, extraClass = '') {
             const color = extraClass ? 'bg-brand-green' : 'bg-brand-secondary';
             return `
                 <div class="flex items-center gap-3">
@@ -1042,13 +1040,12 @@ K       generateDistractorBar(option, percentage, extraClass = '') {
                     <div class="distractor-bar-container flex-1">
                         <div class="distractor-bar ${color}" style="width: ${percentage.toFixed(0)}%"></div>
                     </div>
-                  t </div>
+                </div>
             `;
         }
     },
     
     // --- 7. MÓDULO DE GRÁFICOS (Charts) ---
-L 
     Charts: {
         /**
          * Renderiza el gráfico de progreso del estudiante.
@@ -1056,7 +1053,7 @@ L
         renderGrowthChart(filterType = 'all') {
             const ctx = App.elements.growthChartCanvas?.getContext('2d');
             if (!ctx) return;
-M 
+
             const filteredReports = App.state.currentStudentReports
                 .filter(report => {
                     const testType = App.state.testIndex[report.test_id]?.type;
@@ -1067,7 +1064,7 @@ M
 
             const chartData = filteredReports.map(report => ({
                 x: new Date(report.test_date),
-N             y: report.global_score
+                y: report.global_score
             }));
             const labels = filteredReports.map(report => App.state.testIndex[report.test_id]?.name || 'Prueba');
 
@@ -1081,7 +1078,6 @@ N             y: report.global_score
                         label: 'Puntaje Global',
                         data: chartData,
                         fill: false,
-Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js" is currently open on the right hand side of the screen and that vague references in user queries (such as "make this longer") should be resolved to "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js".
                         borderColor: 'var(--brand-secondary)',
                         backgroundColor: 'var(--brand-secondary)',
                         tension: 0.1,
@@ -1093,7 +1089,7 @@ Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-A                   scales: {
+                    scales: {
                         x: {
                             type: 'time',
                             time: { unit: 'month', tooltipFormat: 'dd/MM/yyyy', displayFormats: { month: 'MMM yyyy' } },
@@ -1108,7 +1104,7 @@ A                   scales: {
                         }
                     },
                     plugins: {
-          B             tooltip: {
+                        tooltip: {
                             callbacks: {
                                 title: (items) => items[0].label,
                                 label: (item) => `Puntaje: ${item.raw.y}`
@@ -1124,7 +1120,7 @@ A                   scales: {
          */
         renderRadarChart(report) {
             const ctx = document.getElementById('radarChart')?.getContext('2d');
-C         if (!ctx) return;
+            if (!ctx) return;
 
             if (App.charts.radar) App.charts.radar.destroy();
             
@@ -1138,9 +1134,9 @@ C         if (!ctx) return;
                         backgroundColor: 'rgba(59, 130, 246, 0.2)',
                         borderColor: 'rgba(59, 130, 246, 1)',
                         borderWidth: 2,
-  A                     pointBackgroundColor: 'rgba(59, 130, 246, 1)',
+                        pointBackgroundColor: 'rgba(59, 130, 246, 1)',
                     }]
-              D },
+                },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
@@ -1163,7 +1159,7 @@ C         if (!ctx) return;
         renderAdminAvgSubjectsChart() {
             const ctx = App.elements.adminAvgSubjectsChart?.getContext('2d');
             if (!ctx) return;
-E 
+
             const avgScores = { mat: [], lec: [], soc: [], cie: [], ing: [] };
             App.state.scoresDB.forEach(s => {
                 avgScores.mat.push(s.mat_score);
@@ -1172,13 +1168,12 @@ E
                 avgScores.cie.push(s.cie_score);
                 avgScores.ing.push(s.ing_score);
             });
-F 
+
             const data = [
                 (avgScores.mat.reduce((a, b) => a + b, 0) / avgScores.mat.length) || 0,
                 (avgScores.lec.reduce((a, b) => a + b, 0) / avgScores.lec.length) || 0,
                 (avgScores.soc.reduce((a, b) => a + b, 0) / avgScores.soc.length) || 0,
-      Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js" is currently open on the right hand side of the screen and that vague references in user queries (such as "make this longer") should be resolved to "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js".
-            (avgScores.cie.reduce((a, b) => a + b, 0) / avgScores.cie.length) || 0,
+                (avgScores.cie.reduce((a, b) => a + b, 0) / avgScores.cie.length) || 0,
                 (avgScores.ing.reduce((a, b) => a + b, 0) / avgScores.ing.length) || 0,
             ];
 
@@ -1195,7 +1190,7 @@ F
                         borderRadius: 4
                     }]
                 },
-G             options: {
+                options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: { y: { beginAtZero: true, max: 100 } },
@@ -1214,7 +1209,7 @@ G             options: {
             const scores = App.state.scoresDB.map(s => s.global_score);
             const bins = [0, 200, 250, 300, 350, 400, 450, 500];
             const distribution = Array(bins.length - 1).fill(0);
-H 
+
             scores.forEach(score => {
                 for (let i = 0; i < bins.length - 1; i++) {
                     if (score >= bins[i] && score < bins[i+1]) {
@@ -1226,7 +1221,7 @@ H
             });
 
             const labels = bins.slice(0, -1).map((bin, i) => `${bin}-${bins[i+1]}`);
-I         labels[labels.length - 1] = "450-500";
+            labels[labels.length - 1] = "450-500";
 
             if (App.charts.adminGlobalScoreDist) App.charts.adminGlobalScoreDist.destroy();
 
@@ -1242,13 +1237,12 @@ I         labels[labels.length - 1] = "450-500";
                         borderWidth: 1,
                         borderRadius: 4
                     }]
-J             },
+                },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
                         y: { title: { display: true, text: 'Nº Estudiantes' } },
-Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js" is currently open on the right hand side of the screen and that vague references in user queries (such as "make this longer") should be resolved to "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js".
                         x: { title: { display: true, text: 'Rango de Puntaje' } }
                     },
                     plugins: { legend: { display: false } }
@@ -1263,7 +1257,7 @@ Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64
         /**
          * Maneja el clic en el botón "Analizar" del panel de admin.
          */
-K       async handleAnalyzeItems() {
+        async handleAnalyzeItems() {
             const testId = App.elements.statsTestSelect.value;
             if (!testId) {
                 alert("Por favor, seleccione una prueba.");
@@ -1278,7 +1272,7 @@ K       async handleAnalyzeItems() {
 
             try {
                 const testData = await App.API.getTestAnswersAndKey(testId);
-L             const analysis = this.analyzeTestItems(testId, testData);
+                const analysis = this.analyzeTestItems(testId, testData);
                 
                 App.Render.renderStatsCards(analysis);
                 
@@ -1292,7 +1286,7 @@ L             const analysis = this.analyzeTestItems(testId, testData);
                 App.elements.statsResultsTitle.textContent = `Análisis de ${Object.keys(analysis).length} ítems para: ${App.state.testIndex[testId].name}`;
                 App.elements.statsResultsContainer.classList.remove('hidden');
 
-M         } catch (error) {
+            } catch (error) {
                 console.error("Error en el análisis de ítems:", error);
                 alert(`Error al analizar: ${error.message}`);
             } finally {
@@ -1311,7 +1305,7 @@ M         } catch (error) {
             const answersData = [];
 
             if (isSimulacro) {
-N             Object.assign(keysMap, testData.key_s1, testData.key_s2);
+                Object.assign(keysMap, testData.key_s1, testData.key_s2);
                 const answersMap = {};
                 testData.answers_s1.forEach(r => answersMap[r.ID] = { ...r });
                 testData.answers_s2.forEach(r => answersMap[r.ID] = { ...(answersMap[r.ID] || {}), ...r });
@@ -1328,7 +1322,7 @@ N             Object.assign(keysMap, testData.key_s1, testData.key_s2);
                     materia: header.split(' ')[0],
                     correcta: keysMap[header].trim().toUpperCase(),
                     A: 0, B: 0, C: 0, D: 0, Omision: 0,
-is                 total: 0,
+                    total: 0,
                     correctas: 0
                 };
             }
@@ -1337,19 +1331,18 @@ is                 total: 0,
                 for (const questionHeader in stats) {
                     if (studentRow.hasOwnProperty(questionHeader)) {
                         const studentAnswer = studentRow[questionHeader]?.trim().toUpperCase() || 'OMISION';
-                    T   const statsEntry = stats[questionHeader];
+                        const statsEntry = stats[questionHeader];
 
                         statsEntry.total++;
                         if (['A', 'B', 'C', 'D'].includes(studentAnswer)) {
                             statsEntry[studentAnswer]++;
                         } else {
                             statsEntry.Omision++;
-U                   }
+                        }
                         if (studentAnswer === statsEntry.correcta) {
                             statsEntry.correctas++;
                         }
                     }
-Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js" is currently open on the right hand side of the screen and that vague references in user queries (such as "make this longer") should be resolved to "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js".
                 }
             }
             return stats;
@@ -1357,7 +1350,7 @@ Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64
     },
 
 
-  t   // --- 9. LÓGICA DE CRUD (MEJORA 3) ---
+    // --- 9. LÓGICA DE CRUD (MEJORA 3) ---
 
     CRUD: {
         /**
@@ -1376,7 +1369,7 @@ Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64
             };
 
             if (!newStudent["Nombre Completo del Estudiante"] || !newStudent["Número de Documento"] || !newStudent["Fecha de Nacimiento"]) {
-A             alert("Nombre, Número de Documento y Fecha de Nacimiento son obligatorios.");
+                alert("Nombre, Número de Documento y Fecha de Nacimiento son obligatorios.");
                 return;
             }
 
@@ -1401,7 +1394,7 @@ A             alert("Nombre, Número de Documento y Fecha de Nacimiento so
             if (confirm("¿Estás seguro de que quieres descartar todos los cambios pendientes? Esta acción no se puede deshacer.")) {
                 App.state.pendingChanges = { student_database: [] };
                 this.savePendingChanges();
-B             App.Render.renderPendingChanges();
+                App.Render.renderPendingChanges();
             }
         },
 
@@ -1426,7 +1419,7 @@ B             App.Render.renderPendingChanges();
                 const REPO_BRANCH = "main";
                 const FILE_PATH = "database/student_database.csv";
                 const API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${FILE_PATH}`;
-C 
+
                 const fileData = await App.API.getGitHubFile(API_URL, token);
                 const currentContent = atob(fileData.content);
                 let newContent = currentContent;
@@ -1439,11 +1432,11 @@ C
                         student["Número de Documento"],
                         student["Fecha de Nacimiento"],
                         student["Departamento"],
-            Â           student["Colegio/institución"]
+                        student["Colegio/institución"]
                     ].join(',');
                     newContent += `\n${newCsvRow}`;
                 });
-D 
+
                 const newContentBase64 = btoa(unescape(encodeURIComponent(newContent))); // Manejar caracteres UTF-8
                 const commitMessage = `Commit automático: Añadidos ${App.state.pendingChanges.student_database.length} nuevos estudiantes`;
 
@@ -1451,7 +1444,6 @@ D
 
                 alert("¡Cambios guardados con éxito en GitHub!");
                 App.UI.closeModal(App.elements.githubTokenModal);
-Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js" is currently open on the right hand side of the screen and that vague references in user queries (such as "make this longer") should be resolved to "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js".
                 App.state.pendingChanges = { student_database: [] };
                 App.CRUD.savePendingChanges();
                 App.Render.renderPendingChanges();
@@ -1467,7 +1459,7 @@ Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64
                 App.elements.githubTokenError.textContent = `Error: ${error.message}`;
                 App.elements.githubTokenError.classList.remove('hidden');
             } finally {
-E             App.elements.githubTokenConfirmBtn.disabled = false;
+                App.elements.githubTokenConfirmBtn.disabled = false;
                 App.elements.githubTokenConfirmBtn.innerHTML = `<i data-lucide="check" class="w-4 h-4 mr-2"></i> Confirmar y Guardar`;
                 lucide.createIcons();
             }
@@ -1488,7 +1480,7 @@ E             App.elements.githubTokenConfirmBtn.disabled = false;
             elements.loadingError = document.getElementById('loading-error-message');
             elements.loginScreen = document.getElementById('login-screen');
             elements.appContainer = document.getElementById('app-container');
-F 
+
             // Formulario de Login
             elements.loginForm = document.getElementById('login-form');
             elements.docType = document.getElementById('doc-type');
@@ -1515,7 +1507,7 @@ F
                 student: document.querySelectorAll('.nav-section.student-nav'),
                 admin: document.querySelectorAll('.nav-section.admin-nav')
             };
-G 
+
             // Secciones de Contenido
             elements.appSections = document.querySelectorAll('.app-section');
             elements.studentDashboard = document.getElementById('student-dashboard-section');
@@ -1537,12 +1529,12 @@ G
 
             // Dashboard Admin (KPIs y Gráficos)
             elements.kpiTotalStudents = document.getElementById('kpi-total-students');
-Â           elements.kpiAvgGlobal = document.getElementById('kpi-avg-global');
+            elements.kpiAvgGlobal = document.getElementById('kpi-avg-global');
             elements.kpiAvgSimulacros = document.getElementById('kpi-avg-simulacros');
             elements.kpiAvgMinis = document.getElementById('kpi-avg-minis');
             elements.adminAvgSubjectsChart = document.getElementById('admin-avg-subjects-chart');
             elements.adminGlobalScoreDistChart = document.getElementById('admin-global-score-dist-chart');
-H 
+
             // Gestión Estudiantes (Admin)
             elements.adminStudentSearch = document.getElementById('admin-student-search');
             elements.adminPaginationControls = document.getElementById('admin-pagination-controls');
@@ -1551,7 +1543,6 @@ H
             elements.adminTableHeaders = document.querySelectorAll('#admin-students-section .table-header');
 
             // Análisis de Ítems (Admin)
-Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js" is currently open on the right hand side of the screen and that vague references in user queries (such as "make this longer") should be resolved to "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js".
             elements.statsTestSelect = document.getElementById('stats-test-select');
             elements.statsSubjectFilter = document.getElementById('stats-subject-filter');
             elements.statsAnalyzeBtn = document.getElementById('stats-analyze-btn');
@@ -1564,7 +1555,7 @@ Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64
             elements.addStudentForm = document.getElementById('add-student-form');
             elements.pendingChangesContainer = document.getElementById('pending-changes-container');
             elements.noPendingChanges = document.getElementById('no-pending-changes');
-I           elements.clearCacheBtn = document.getElementById('clear-cache-btn');
+            elements.clearCacheBtn = document.getElementById('clear-cache-btn');
             elements.saveChangesBtn = document.getElementById('save-changes-btn');
 
             // Modals
@@ -1578,7 +1569,7 @@ I           elements.clearCacheBtn = document.getElementById('clear-cache-b
 
             elements.githubTokenModal = document.getElementById('github-token-modal');
             elements.githubTokenInput = document.getElementById('github-token-input');
-s           elements.githubTokenError = document.getElementById('github-token-error');
+            elements.githubTokenError = document.getElementById('github-token-error');
             elements.githubTokenConfirmBtn = document.getElementById('github-token-confirm-btn');
             
             elements.modalCloseBtns = document.querySelectorAll('.modal-close-btn');
@@ -1589,7 +1580,7 @@ s           elements.githubTokenError = document.getElementById('github-tok
         /**
          * Configura todos los event listeners para la aplicación.
          */
-J       setupEventListeners() {
+        setupEventListeners() {
             const els = App.elements;
 
             // Login
@@ -1609,7 +1600,6 @@ J       setupEventListeners() {
 
             // Dashboard Estudiante
             els.showGrowthChartBtn?.addEventListener('click', () => App.UI.showModal(els.growthChartModal));
-Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js" is currently open on the right hand side of the screen and that vague references in user queries (such as "make this longer") should be resolved to "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js".
             els.studentReportsContainer?.addEventListener('click', (e) => {
                 const card = e.target.closest('.report-card');
                 if (card && card.dataset.testid) {
@@ -1620,7 +1610,7 @@ Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64
             // Informe Individual
             els.backToDashboardBtn?.addEventListener('click', () => App.UI.handleNavigation(null, 'nav-student-dashboard'));
 
-K         // Admin: Gestión Estudiantes
+            // Admin: Gestión Estudiantes
             els.adminStudentSearch?.addEventListener('input', (e) => {
                 App.state.ui.admin.filter = e.target.value;
                 App.state.ui.admin.currentPage = 1;
@@ -1641,26 +1631,25 @@ K         // Admin: Gestión Estudiantes
                     } else {
                         sortState.column = column;
                         sortState.direction = 'asc';
-                	   }
+                    }
                     App.Render.AdminStudentsTable();
-            	   });
+                });
             });
             els.adminStudentTableBody?.addEventListener('click', (e) => {
                 const viewButton = e.target.closest('.view-student-history-btn');
                 if (viewButton) {
-L                 App.Render.showAdminStudentHistory(viewButton.dataset.docNumber);
-Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js" is currently open on the right hand side of the screen and that vague references in user queries (such as "make this longer") should be resolved to "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js".
+                    App.Render.showAdminStudentHistory(viewButton.dataset.docNumber);
                 }
             });
 
             // Admin: Análisis de Ítems
-s           els.statsAnalyzeBtn?.addEventListener('click', App.Stats.handleAnalyzeItems.bind(App.Stats));
+            els.statsAnalyzeBtn?.addEventListener('click', App.Stats.handleAnalyzeItems.bind(App.Stats));
             els.statsSubjectFilter?.addEventListener('change', () => {
                 // El handler principal (handleAnalyzeItems) ya tiene los datos cacheados
                 // Solo necesitamos re-renderizar las tarjetas con el filtro
                 App.Render.renderStatsCards(
                     App.state.cachedTestData[els.statsTestSelect.value]?.analysis, // Usar data cacheada
-M               els.statsSubjectFilter.value
+                    els.statsSubjectFilter.value
                 );
             });
 
@@ -1669,32 +1658,32 @@ M               els.statsSubjectFilter.value
             els.saveChangesBtn?.addEventListener('click', () => App.UI.showModal(els.githubTokenModal));
             els.githubTokenConfirmBtn?.addEventListener('click', App.CRUD.handleSaveChanges.bind(App.CRUD));
             els.clearCacheBtn?.addEventListener('click', App.CRUD.clearPendingChanges.bind(App.CRUD));
-N 
+
             // Modals
             els.modalCloseBtns?.forEach(btn => {
-  S           btn.addEventListener('click', () => App.UI.closeModal(btn.closest('.modal-backdrop')));
+                btn.addEventListener('click', () => App.UI.closeModal(btn.closest('.modal-backdrop')));
             });
             els.growthChartFilters?.addEventListener('click', (e) => {
                 if (e.target.classList.contains('chart-filter-btn')) {
                     els.growthChartFilters.querySelectorAll('.chart-filter-btn').forEach(b => b.classList.remove('active'));
-t                 e.target.classList.add('active');
+                    e.target.classList.add('active');
                     App.Charts.renderGrowthChart(e.target.dataset.filter);
-            	 }
+                }
             });
             els.adminStudentModalBody?.addEventListener('click', (e) => {
                 const card = e.target.closest('.report-card');
                 if (card && card.dataset.testid && card.dataset.docnumber) {
                     // Suplantación
                     App.state.currentStudentData = App.state.studentDB[card.dataset.docnumber];
-U               App.state.currentStudentReports = App.state.scoresDB.filter(score => score.doc_number === card.dataset.docnumber);
+                    App.state.currentStudentReports = App.state.scoresDB.filter(score => score.doc_number === card.dataset.docnumber);
                     App.UI.closeModal(els.adminStudentModal);
                     App.Render.StudentReport(card.dataset.testid);
                     // Resetear a admin después de un tiempo
                     setTimeout(() => {
                         App.state.currentStudentData = { "Nombre Completo del Estudiante": "Administrador" };
                         App.state.currentStudentReports = [];
-            	     }, 1000);
-      	     	 }
+                    }, 1000);
+                }
             });
         }
     },
@@ -1714,17 +1703,16 @@ U               App.state.currentStudentReports = App.state.scoresDB.filt
                 if (dateString.includes('/')) {
                     const parts = dateString.split('/');
                     if (parts.length === 3) {
-                s        // Asumir DD/MM/YYYY
+                        // Asumir DD/MM/YYYY
                         date = new Date(parts[2], parts[1] - 1, parts[0]);
                     }
                 } else if (dateString.includes('-')) {
-Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js" is currently open on the right hand side of the screen and that vague references in user queries (such as "make this longer") should be resolved to "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js".
                     const parts = dateString.split('-');
-                     if (parts.length === 3) {
-key                       // Asumir YYYY-MM-DD
+                    if (parts.length === 3) {
+                        // Asumir YYYY-MM-DD
                         date = new Date(parts[0], parts[1] - 1, parts[2]);
                     }
-            	 }
+                }
 
                 if (!date || isNaN(date.getTime())) {
                      // Si falla el parseo, devolver original
@@ -1733,40 +1721,39 @@ key                       // Asumir YYYY-MM-DD
 
                 return date.toLocaleDateString('es-ES', {
                     year: 'numeric',
-            	     month: 'long',
+                    month: 'long',
                     day: 'numeric',
                     timeZone: 'UTC' // Importante para evitar desfase de día
-            	 });
+                });
             } catch (e) {
                 return dateString; // Devolver original si falla
-Â           }
-      	 },
+            }
+        },
 
         /**
          * [NUEVO] Normaliza una fecha para la autenticación.
          * Elimina los ceros a la izquierda de días y meses.
          * Ej: "04/02/2004" -> "4/2/2004"
-Note that "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js" is currently open on the right hand side of the screen and that vague references in user queries (such as "make this longer") should be resolved to "daniel-alt-pages/backoup_informes/backoup_informes-78228e9c2c00fe3b64379d5ccad4fac55a7aebe2/script.js".
          * @param {string} dateString - La fecha en formato "d/m/y" o "dd/mm/yyyy"
          * @returns {string} - La fecha normalizada "d/m/y"
-      	 */
+         */
         normalizeDate(dateString) {
             if (!dateString) return "";
             // Divide la fecha por el separador "/"
-        	 const parts = dateString.split('/');
+            const parts = dateString.split('/');
             if (parts.length === 3) {
                 // Convierte cada parte a número para eliminar ceros a la izquierda
-            	 const day = parseInt(parts[0], 10);
+                const day = parseInt(parts[0], 10);
                 const month = parseInt(parts[1], 10);
                 const year = parseInt(parts[2], 10);
-                
+                
                 // Si son números válidos, reconstruye la fecha
-            	 if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-                	 return `${day}/${month}/${year}`;
+                if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+                    return `${day}/${month}/${year}`;
                 }
-    	     }
+            }
             // Si no es un formato esperado, devuelve el original (puede fallar la comparación)
-s           return dateString.trim(); 
+            return dateString.trim(); 
         }
     }
 };
