@@ -3,7 +3,7 @@
     --brand-primary: #F97316;
     --brand-secondary: #3B82F6;
     --brand-blue-dark: #1e40af;
-    --brand-bg: #f8fafc; /* slate-50 */
+    --brand-bg: #f8fafc; /* (DISEÑO v7.0) slate-50, más limpio */
     --brand-text: #334155; /* slate-700 */
     --brand-header: #0f172a; /* slate-900 */
     --brand-surface: #ffffff; /* white */
@@ -22,54 +22,61 @@
 
 /* --- ESTILOS DE COMPONENTES BASE --- */
 .form-label {
-    @apply block text-sm font-medium text-brand-text/90 mb-1;
+    @apply block text-sm font-medium text-brand-text/90 mb-1.5; /* Más espacio */
 }
 
 .form-input {
-    @apply block w-full px-3 py-2 bg-brand-surface border border-brand-border rounded-md shadow-sm
+    @apply block w-full px-3.5 py-2 bg-brand-surface border border-brand-border rounded-lg shadow-sm /* (DISEÑO v7.0) .rounded-lg */
            placeholder-brand-text/40
            focus:outline-none focus:ring-2 focus:ring-brand-secondary/50 focus:border-brand-secondary
            transition duration-150 ease-in-out;
 }
 
-/* Botones Principales */
+/* Botones Principales (DISEÑO v7.0) */
 .button-primary {
-    @apply inline-flex items-center justify-center px-4 py-2 bg-brand-secondary border border-transparent rounded-md
+    @apply inline-flex items-center justify-center px-4 py-2 bg-brand-secondary border border-transparent rounded-lg /* .rounded-lg */
            font-semibold text-sm text-white
            hover:bg-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-secondary
-           transition duration-200 ease-in-out shadow-sm;
+           transition-all duration-200 ease-in-out shadow-sm
+           hover:shadow-md hover:-translate-y-px; /* Efecto hover */
 }
 
 .button-primary-green {
-    @apply inline-flex items-center justify-center px-4 py-2 bg-brand-green border border-transparent rounded-md
+    @apply inline-flex items-center justify-center px-4 py-2 bg-brand-green border border-transparent rounded-lg
            font-semibold text-sm text-white
            hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-green
-           transition duration-200 ease-in-out shadow-sm;
+           transition-all duration-200 ease-in-out shadow-sm
+           hover:shadow-md hover:-translate-y-px;
 }
 
 .button-secondary {
-    @apply inline-flex items-center justify-center px-4 py-2 bg-brand-surface border border-brand-border rounded-md
+    @apply inline-flex items-center justify-center px-4 py-2 bg-brand-surface border border-brand-border rounded-lg
            font-semibold text-sm text-brand-text
            hover:bg-brand-bg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-secondary/50
-           transition duration-200 ease-in-out shadow-sm;
+           transition-all duration-200 ease-in-out shadow-sm
+           hover:shadow-md hover:-translate-y-px;
 }
 
 .button-danger {
-    @apply inline-flex items-center justify-center px-4 py-2 bg-red-50 border border-red-200 rounded-md
+    @apply inline-flex items-center justify-center px-4 py-2 bg-red-50 border border-red-200 rounded-lg
            font-semibold text-sm text-brand-red
            hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-400
-           transition duration-200 ease-in-out shadow-sm;
+           transition-all duration-200 ease-in-out shadow-sm
+           hover:shadow-md hover:-translate-y-px;
 }
 
-/* --- ESTILOS DE LAYOUT (SIDEBAR Y CONTENIDO) --- */
+/* --- ESTILOS DE LAYOUT (SIDEBAR Y CONTENIDO) (DISEÑO v7.0) --- */
 .nav-link {
-    @apply flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-brand-text
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-brand-text
            hover:bg-brand-bg hover:text-brand-header
            transition-colors duration-150 ease-in-out;
 }
 
+/* Estilo de link activo más pronunciado */
 .nav-link.active {
-    @apply bg-brand-secondary/10 text-brand-secondary font-semibold;
+    @apply bg-brand-secondary/10 text-brand-secondary font-semibold
+           border-l-4 border-brand-secondary;
+    @apply px-2; /* Ajustar padding por el borde */
 }
 
 .nav-link i {
@@ -92,25 +99,29 @@
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* --- ESTILOS DE COMPONENTES DE DASHBOARD --- */
+/* --- ESTILOS DE COMPONENTES DE DASHBOARD (DISEÑO v7.0) --- */
+.card-base {
+    /* Estilo base para todas las tarjetas */
+    @apply bg-brand-surface p-5 rounded-xl shadow-sm border border-brand-border
+           transition-all duration-300 ease-in-out;
+}
 
 /* Tarjetas de Informes (Estudiante) */
 .report-card {
-    @apply bg-brand-surface p-5 rounded-lg shadow-sm border border-brand-border
-           transition-all duration-200 ease-in-out
-           hover:shadow-md hover:border-brand-secondary/50;
+    @apply card-base
+           hover:shadow-lg hover:border-brand-secondary/50;
 }
 
 .report-card-placeholder {
-    @apply bg-brand-surface p-5 rounded-lg shadow-sm border border-brand-border h-40 animate-pulse;
+    @apply bg-brand-surface p-5 rounded-xl shadow-sm border border-brand-border h-40 animate-pulse;
 }
 
 /* Tarjetas de Métricas (Admin KPI) */
 .kpi-card {
-    @apply bg-brand-surface p-5 rounded-lg shadow-sm border border-brand-border flex flex-col;
+    @apply card-base;
 }
 .kpi-icon {
-    @apply w-10 h-10 rounded-full flex items-center justify-center mb-3;
+    @apply w-10 h-10 rounded-lg flex items-center justify-center mb-3; /* .rounded-lg */
 }
 .kpi-icon i {
     @apply w-5 h-5;
@@ -128,7 +139,7 @@
            hover:bg-slate-100;
 }
 .table-cell {
-    @apply px-4 py-3 whitespace-nowrap text-sm;
+    @apply px-4 py-4 whitespace-nowrap text-sm; /* Más padding vertical */
 }
 .table-row {
     @apply border-b border-brand-border transition-colors duration-150;
@@ -140,9 +151,10 @@
     @apply bg-brand-bg;
 }
 
-/* --- MODALS --- */
+/* --- MODALS (DISEÑO v7.0) --- */
 .modal-backdrop {
-    @apply fixed inset-0 z-40 bg-black/40 flex items-center justify-center p-4
+    @apply fixed inset-0 z-40 bg-black/40 backdrop-blur-sm /* Añadido backdrop-blur */
+           flex items-center justify-center p-4
            opacity-0 invisible transition-opacity duration-300 ease-in-out;
 }
 .modal-backdrop.shown {
@@ -150,7 +162,7 @@
 }
 
 .modal-container {
-    @apply bg-brand-surface w-full rounded-lg shadow-2xl border border-brand-border
+    @apply bg-brand-surface w-full rounded-xl shadow-2xl border border-brand-border /* .rounded-xl */
            transform scale-95 opacity-0 transition-all duration-300 ease-in-out;
 }
 .modal-backdrop.shown .modal-container {
@@ -158,7 +170,7 @@
 }
 
 .modal-header-container {
-    @apply flex items-center justify-between p-4 border-b border-brand-border;
+    @apply flex items-center justify-between p-5 border-b border-brand-border; /* Más padding */
 }
 .modal-header {
     @apply text-lg font-semibold text-brand-header;
@@ -179,9 +191,9 @@
     @apply bg-brand-secondary text-white border-brand-secondary;
 }
 
-/* --- ESTILOS DEL INFORME INDIVIDUAL --- */
+/* --- ESTILOS DEL INFORME INDIVIDUAL (DISEÑO v7.0) --- */
 .score-card {
-    @apply bg-brand-surface p-5 rounded-lg shadow-sm border border-brand-border text-center;
+    @apply card-base text-center;
 }
 .score-card .subject-icon {
     @apply w-10 h-10 mx-auto mb-3;
@@ -192,12 +204,22 @@
 .score-card .score-label {
     @apply text-sm font-medium text-brand-text/80;
 }
+/* Estilo para las pestañas (tabs) del informe */
+.tab-btn {
+    @apply py-3 px-1 border-b-2 border-transparent
+           text-brand-text/70 font-medium text-sm
+           hover:text-brand-header hover:border-brand-border
+           transition-all duration-200;
+}
+.tab-btn.active {
+    @apply text-brand-secondary border-brand-secondary font-semibold;
+}
 
 .feedback-table th {
-    @apply px-3 py-2 text-left text-xs font-medium text-brand-text/70 uppercase tracking-wider bg-slate-50;
+    @apply px-3 py-3 text-left text-xs font-medium text-brand-text/70 uppercase tracking-wider bg-slate-50;
 }
 .feedback-table td {
-    @apply px-3 py-2 text-sm;
+    @apply px-3 py-3 text-sm; /* Más padding */
 }
 .feedback-table .icon-correct {
     @apply w-5 h-5 text-brand-green;
@@ -206,12 +228,12 @@
     @apply w-5 h-5 text-brand-red;
 }
 
-/* --- ESTILOS DE ANÁLISIS DE ÍTEMS (ADMIN) --- */
+/* --- ESTILOS DE ANÁLISIS DE ÍTEMS (ADMIN) (DISEÑO v7.0) --- */
 .stats-card {
-    @apply bg-brand-surface p-5 rounded-lg shadow-sm border border-brand-border;
+    @apply card-base;
 }
 .stats-card-header {
-    @apply flex justify-between items-center pb-3 border-b border-brand-border;
+    @apply flex flex-col sm:flex-row justify-between sm:items-center pb-3 border-b border-brand-border gap-2;
 }
 .stats-card-title {
     @apply text-base font-semibold text-brand-header;
@@ -228,8 +250,8 @@
 .stats-pill-gray { @apply bg-slate-100 text-slate-700; }
 
 .distractor-bar-container {
-    @apply w-full bg-slate-100 rounded-full h-2.5;
+    @apply w-full bg-slate-100 rounded-full h-3; /* (DISEÑO v7.0) Más gruesa */
 }
 .distractor-bar {
-    @apply h-2.5 rounded-full transition-all duration-500;
+    @apply h-3 rounded-full transition-all duration-500;
 }
